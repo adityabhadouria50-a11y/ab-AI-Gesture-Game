@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Starfall Blade: Celestial Slicer</title>
+    <meta name="description" content="Slice ascending cosmic crystals with your bare hands in front of the webcam. AI gesture game powered by MediaPipe." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpolygon points='16,3 29,16 16,29 3,16' fill='%2338bdf8'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="stage"></div>
+    <video id="cam" playsinline muted></video>
+    <div id="cam-container" class="hidden">
+      <canvas id="preview" width="220" height="165"></canvas>
+      <div id="cam-status">AI Vision Tracking</div>
+    </div>
+
+    <!-- HUD -->
+    <div id="hud" class="hud hidden">
+      <div class="hud-left">
+        <span class="hud-label">SCORE</span>
+        <span id="score" class="hud-val">0</span>
+      </div>
+      <div class="hud-center">
+        <div id="combo-badge" class="combo-badge hidden">
+          <span id="combo-text">x2 COMBO</span>
+        </div>
+      </div>
+      <div class="hud-right">
+        <span class="hud-label">TIME</span>
+        <span id="time" class="hud-val">45s</span>
+      </div>
+    </div>
+
+    <!-- Title Screen -->
+    <section id="title" class="card">
+      <div class="badge">AI WEBCAM GESTURE GAME</div>
+      <h1>STARFALL BLADE</h1>
+      <p class="subtitle">Celestial Slicer</p>
+
+      <div class="gesture-showcase">
+        <div class="gesture-item">
+          <div class="gesture-icon">⚔️</div>
+          <div class="gesture-title">Blade Slash</div>
+          <div class="gesture-desc">Sweep your hand fast to slice crystals</div>
+        </div>
+        <div class="gesture-item">
+          <div class="gesture-icon">🤏</div>
+          <div class="gesture-title">Pinch Nova</div>
+          <div class="gesture-desc">Pinch & release to burst nearby targets</div>
+        </div>
+        <div class="gesture-item">
+          <div class="gesture-icon">👏</div>
+          <div class="gesture-title">Cosmic Clap</div>
+          <div class="gesture-desc">Clap hands to clear void anomalies</div>
+        </div>
+      </div>
+
+      <div class="warning-note">
+        ⚠️ <b>Avoid dark Void Orbs</b> — slicing them breaks your combo and deducts score!
+      </div>
+
+      <div class="row">
+        <button id="b-cam" class="btn-primary">Play with Camera</button>
+        <button id="b-mouse" class="btn-secondary">Play with Mouse / Touch</button>
+      </div>
+      <p id="err" class="err"></p>
+      <p class="privacy-note">
+        🔒 Video is processed entirely on your device with MediaPipe. Never sent to any server.<br />
+        Controls: Space starts/restarts, M mutes audio.
+      </p>
+    </section>
+
+    <!-- Results Screen -->
+    <section id="results" class="card hidden">
+      <div class="badge">ROUND COMPLETE</div>
+      <h2 id="r-title">Cosmic Mastery</h2>
+      <p class="label">FINAL SCORE</p>
+      <p id="r-score" class="big-score">0</p>
+      <div class="stats-row">
+        <div class="stat-box">
+          <span class="stat-num" id="r-sliced">0</span>
+          <span class="stat-lbl">Crystals Sliced</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-num" id="r-combo">1x</span>
+          <span class="stat-lbl">Max Combo</span>
+        </div>
+      </div>
+      <p id="r-best" class="best-line">Best Score: 0</p>
+      <div class="row">
+        <button id="b-restart" class="btn-primary">Play Again</button>
+      </div>
+      <p class="privacy-note">Pinch, click or press Space to play again.</p>
+    </section>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
