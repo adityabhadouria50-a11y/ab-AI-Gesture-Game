@@ -8,6 +8,7 @@ import type { HandView, BotHandState } from '../../core/input';
 import type { HandPose } from '../../hand-gesture-kit';
 import { createWorld, startGame, step, fire, reload, pick, project, accuracy, MAG, MAX_LIVES, RAPID_S, type World, type Bird } from './rules';
 import { ShooterScene } from './scene';
+import { ThumbTrigger, AimHistory } from './trigger';
 
 export const META: GameMeta = {
   id: 'shooter',
@@ -23,34 +24,20 @@ export const META: GameMeta = {
   tip: '🐦 Every bird that reaches the other side costs a heart (you have 5). Geese take 2 hits, golden birds are fast and worth 500. Shoot balloons: red = +1 heart, yellow = rapid fire, blue = slow motion.',
 };
 
-/** Thumb-drop trigger with hysteresis: fires once per drop, re-arms when the thumb comes back up. */
-class Trigger {
-  armed = false;
-  down = false;
-  update(h: HandView): boolean {
-    // the thumb is "down" when it's tucked in or curled across the palm
-    const v = Math.max(1 - h.thumbOut, h.curl[0]);
-    if (!this.down && v > 0.55) {
-      this.down = true;
-      if (this.armed) {
-        this.armed = false;
-        return true;
-      }
-    } else if (v < 0.32) {
-      // thumb back up: ready for the next shot
-      this.down = false;
-      this.armed = true;
-    }
-    return false;
-  }
-}
-
-const isFist = (h: HandView) => h.pose === 'fist' || (h.curl[1] > 0.7 && h.curl[2] > 0.7 && h.curl[3] > 0.6);
+/**
+ * A deliberate fist: every finger curled, thumb tucked. Pointing the index finger at the camera can make it *look*
+ * curled to the tracker, so the index must be clearly folded too, and the fist has to be held (see FIST_HOLD_S).
+ */
+const isFist = (h: HandView) => h.curl[1] > 0.78 && h.curl[2] > 0.7 && h.curl[3] > 0.6 && h.thumbGap < 0.5;
+const FIST_HOLD_S = 0.3;
+/** A thumb press nudges the hand: a shot may use the aim from up to this long before the trigger fired. */
+const REWIND_MS = 120;
 
 export function createShooter(env: GameEnv): Game {
   const world = createWorld(env.seed);
   const scene = new ShooterScene(env.gl);
-  const triggers = [new Trigger(), new Trigger()];
+  const triggers = [new ThumbTrigger(), new ThumbTrigger()];
+  const history = [new AimHistory(), new AimHistory()];
   const fistT = [0, 0];
   const aims = [{ x: 0.5, y: 0.5 }, { x: 0.5, y: 0.5 }];
   const bot = new ShooterBot();
@@ -69,8 +56,8 @@ export function createShooter(env: GameEnv): Game {
       <div class="hud-block right"><span class="hud-label">Hearts</span><div class="lives hearts" data-k="lives">${'<i></i>'.repeat(MAX_LIVES)}</div></div>
     </div>
     <div class="ammo" data-k="ammo"></div>
-    <div class="crosshair" data-k="ch0"><i></i><b></b><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/></svg></div>
-    <div class="crosshair alt" data-k="ch1"><i></i><b></b><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/></svg></div>
+    <div class="crosshair" data-k="ch0"><i></i><b></b><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/></svg><u><s></s></u></div>
+    <div class="crosshair alt" data-k="ch1"><i></i><b></b><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/></svg><u><s></s></u></div>
     <div class="damage-vignette" data-k="dmg"></div>
     <label class="hud-toggle"><input type="checkbox" data-k="auto"> Auto-fire on target</label>`;
   const $ = (k: string) => env.hud.querySelector<HTMLElement>(`[data-k="${k}"]`)!;
@@ -169,6 +156,8 @@ export function createShooter(env: GameEnv): Game {
     },
     start() {
       startGame(world, Number(env.params.get('wave')) || 1);
+      triggers.forEach((t) => t.reset());
+      history.forEach((hh) => hh.clear());
       phase = 'play';
       shownAmmo = shownScore = shownLives = -1;
       env.sound.setTheme('dojo');
@@ -186,13 +175,17 @@ export function createShooter(env: GameEnv): Game {
           visAims.push({ x: 0.5, y: 0.5, active: false });
           el.classList.remove('on');
           fistT[i] = 0;
+          triggers[i].reset();
+          history[i].clear();
           continue;
         }
         // smooth the aim a little more than the engine does, but stay responsive on big moves
         const a = aims[i];
         const k = Math.min(1, dt * (pointer ? 60 : 22));
-        a.x += (h.tip.x - a.x) * k;
-        a.y += (h.tip.y - a.y) * k;
+        a.x += (h.aim.x - a.x) * k;
+        a.y += (h.aim.y - a.y) * k;
+        const now = performance.now();
+        history[i].push(now, a.x, a.y);
         visAims.push({ x: a.x, y: a.y, active: true });
         el.classList.toggle('on', phase === 'play');
         el.style.transform = `translate(${a.x * innerWidth}px, ${a.y * innerHeight}px)`;
@@ -205,14 +198,25 @@ export function createShooter(env: GameEnv): Game {
           if (env.input.clicks > 0 || env.input.pointerDown) fire(world, a.x, a.y, aspect, i);
           if (env.input.rightClicks > 0) reload(world);
         } else {
-          const pulled = triggers[i].update(h);
+          const pulled = triggers[i].update(h.thumbGap, dt);
+          el.style.setProperty('--trig', triggers[i].level.toFixed(2));
+          el.classList.toggle('armed', triggers[i].armed);
           if (isFist(h)) {
             fistT[i] += dt;
-            if (fistT[i] > 0.15) reload(world);
-          } else {
-            fistT[i] = 0;
-            if (pulled || (autoFire && target)) fire(world, a.x, a.y, aspect, i);
-          }
+            if (fistT[i] > FIST_HOLD_S) reload(world);
+          } else fistT[i] = 0;
+          if (pulled) {
+            // the press may have nudged the aim off the bird: use the most recent aim that was on one
+            let at: { x: number; y: number } = a;
+            for (const ms of [0, 40, 80, REWIND_MS]) {
+              const p = ms === 0 ? a : history[i].at(now, ms);
+              if (p && pick(world, p.x, p.y, aspect)) {
+                at = p;
+                break;
+              }
+            }
+            fire(world, at.x, at.y, aspect, i);
+          } else if (autoFire && target && fistT[i] === 0) fire(world, a.x, a.y, aspect, i);
         }
       }
 
@@ -319,7 +323,7 @@ class ShooterBot {
       return out(this.bangT > 0.05 ? BANG : GUN);
     }
     if (w.ammo <= 0 && w.reloadT <= 0 && w.rapidT <= 0) {
-      this.fistT = 0.35;
+      this.fistT = 0.5;
       return out(FIST);
     }
     let best: Bird | null = null;

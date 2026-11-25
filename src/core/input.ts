@@ -44,6 +44,10 @@ export interface HandView {
   /** Smoothed fingertip speed in screen heights per second. */
   speed: number;
   pinch: number;
+  /** Thumb tip to the index finger's base, in wrist→index-knuckle lengths (3D). Big = thumb up, small = pressed. */
+  thumbGap: number;
+  /** Steadier pointing position for aiming: between the index knuckle and fingertip (palm for pointer / bot). */
+  aim: P;
   thumbOut: number;
   curl: number[];
   pose: string | null;
@@ -59,6 +63,17 @@ export interface BotHandState {
 }
 
 const POINTER_PINCH_S = 0.1;
+
+/** Thumb tip to the nearer of the index knuckle / middle joint, over the wrist→index-knuckle bone, in 3D. */
+export function thumbGap(lm: Vec3[], aspect: number): number {
+  const P = (i: number) => ({ x: lm[i].x * aspect, y: lm[i].y, z: lm[i].z * aspect * 0.6 });
+  const d = (a: number, b: number) => {
+    const p = P(a), q = P(b);
+    return Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z);
+  };
+  const bone = d(0, 5);
+  return bone > 1e-6 ? Math.min(d(4, 5), d(4, 6)) / bone : 0;
+}
 
 export class Input {
   readonly hands: Hands;
@@ -156,12 +171,17 @@ export class Input {
     const views: HandView[] = [];
     const seen = new Set<number>();
     const synthetic = this.mode !== 'camera';
+    const v = this.hands.video;
+    const camAspect = !synthetic && v.videoWidth ? v.videoWidth / v.videoHeight : 16 / 9;
 
     for (const h of this.latest) {
       seen.add(h.id);
       const palm = toScreen(h.features.center, REGION);
       // synthetic hands are placed by their palm at exactly the pointer / bot point
-      const tip: P = synthetic ? palm : toScreen(h.landmarks[8], TIP_REGION);
+      const lm = h.landmarks;
+      const tip: P = synthetic ? palm : toScreen(lm[8], TIP_REGION);
+      // the fingertip jitters most when the finger points at the camera; the knuckle is rock steady
+      const aim: P = synthetic ? palm : toScreen({ x: lm[5].x * 0.45 + lm[8].x * 0.55, y: lm[5].y * 0.45 + lm[8].y * 0.55 }, TIP_REGION);
       const prev = this.last.get(h.id);
       const prevPalm = prev?.palm ?? palm;
       const prevTip = prev?.tip ?? tip;
@@ -179,6 +199,8 @@ export class Input {
         prevTip,
         speed,
         pinch: h.pinch,
+        thumbGap: thumbGap(lm, camAspect),
+        aim,
         thumbOut: h.features.thumbOut,
         curl: h.features.curl,
         pose: h.pose,

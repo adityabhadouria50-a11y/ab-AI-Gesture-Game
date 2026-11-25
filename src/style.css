@@ -345,6 +345,28 @@ button:active { transform: translateY(1px) scale(0.98); }
 .crosshair i, .crosshair b { position: absolute; left: 50%; top: 50%; background: #fff; border-radius: 2px; }
 .crosshair i { width: 22px; height: 2px; margin: -1px 0 0 -11px; }
 .crosshair b { width: 2px; height: 22px; margin: -11px 0 0 -1px; }
+.crosshair u {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 4px);
+  width: 40px;
+  height: 5px;
+  margin-left: -20px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+body.camera-mode .crosshair u { opacity: 1; }
+.crosshair u s {
+  display: block;
+  height: 100%;
+  background: #fde047;
+  transform-origin: left;
+  transform: scaleX(var(--trig, 0));
+}
+.crosshair:not(.armed) u s { background: #f87171; }
 .crosshair.lock svg { stroke: #f87171; transform: scale(0.72) rotate(45deg); filter: drop-shadow(0 0 8px #ef4444); }
 .crosshair.hit::after {
   content: '';

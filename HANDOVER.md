@@ -25,7 +25,10 @@ Three playable hand-tracking games behind one hub, each also playable with mouse
   into the floor and dry, bombs, lives, swipe combos, Frenzy / Freeze / Double power fruit, difficulty ramp.
 
 ## Verification (this machine, headless GPU Chrome)
-- `npm test`: 32/32 (starfall rules 10, gestures 3, fruit rules 9, sky hunter rules 10).
+- `npm test`: 42/42 (starfall rules 10, gestures 3, fruit rules 9, sky hunter rules 10, thumb trigger 10).
+- Thumb trigger: self-calibrates to each hand (fires when the thumb drops to 72% of its recent thumb-up gap,
+  re-arms at 86%), shots use the last on-target aim from the 120 ms before the press, and an on-screen meter under
+  the crosshair shows how far the thumb is pressed (yellow = armed, red = waiting for the thumb to come back up).
 - `npm run typecheck`, `npm run build`: clean.
 - `npm run capture`: all three bots score, Starfall reaches results and restarts, zero console / GL errors. Desktop and
   mobile (390x844) screenshots checked by eye.
@@ -43,6 +46,7 @@ Three playable hand-tracking games behind one hub, each also playable with mouse
 | `BLADE_RADIUS`, `NOVA_RADIUS`, `COMBO_WINDOW_S`, `CLAP_COOLDOWN_S` | `games/starfall/rules.ts` | Starfall feel |
 | `BLADE_MIN_SPEED`, `BLADE_MARGIN`, `MAX_LIVES`, `LIFE_EVERY`, power-up durations | `games/fruit/rules.ts` | Juice Dojo feel |
 | `CROSS` (bird speed, screen widths / s), `ASSIST`, `MAG`, `RELOAD_S`, `PITCH`, wave pacing in `step()` | `games/shooter/rules.ts` | Sky Hunter feel |
-| Trigger thresholds (0.55 / 0.32) | `Trigger` in `games/shooter/index.ts` | thumb-drop sensitivity |
+| `FIRE_RATIO`, `REARM_RATIO`, `MIN_PEAK` | `games/shooter/trigger.ts` | thumb-drop sensitivity (self-calibrating) |
+| `REWIND_MS`, `FIST_HOLD_S` | `games/shooter/index.ts` | shot aim rewind, fist-to-reload hold time |
 | `REGION`, `TIP_REGION` | `core/input.ts` | camera crop mapped to the screen |
 | `DWELL_S` | `main.ts` | hand-cursor hold-to-click time |
