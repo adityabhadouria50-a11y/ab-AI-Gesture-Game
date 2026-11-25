@@ -2,7 +2,7 @@
 // both hands, and the latch must turn it into exactly one press and one release.
 import { describe, expect, it } from 'vitest';
 import { GestureEngine, syntheticHand, SYNTHETIC_POSES as P } from '../src/hand-gesture-kit';
-import { PinchLatch } from '../src/pinch';
+import { PinchLatch } from '../src/core/pinch';
 
 const run = (pose: typeof P.open, handedness: 'Left' | 'Right' = 'Right', frames = 10) => {
   const e = new GestureEngine();

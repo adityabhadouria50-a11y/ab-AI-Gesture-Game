@@ -4,7 +4,7 @@
  * dodging void anomalies, chaining multi-combos, and restarting on results.
  */
 import type { World, Target } from './rules';
-import type { BotHandState } from './input';
+import type { BotHandState } from '../../core/input';
 
 export class Bot {
   x = 0.5;
@@ -12,28 +12,10 @@ export class Bot {
   pinch = 0;
 
   private holdPinch = 0;
-  private resultsT = 0;
 
-  update(w: World, dt: number, aspect: number): BotHandState[] {
-    // Handling restart on results screen
-    if (w.phase === 'results') {
-      this.resultsT += dt;
-      if (this.resultsT > 1.2) {
-        this.resultsT = 0;
-        this.holdPinch = 0.4;
-      }
-      if (this.holdPinch > 0) {
-        this.holdPinch -= dt;
-        this.pinch = this.holdPinch > 0.1 ? 1 : 0;
-      } else {
-        this.pinch = 0;
-      }
-      return [this.out()];
-    }
-
-    this.resultsT = 0;
-
+  update(w: World, dt: number, aspect: number, _over = false): BotHandState[] {
     if (w.phase !== 'play') {
+      this.pinch = 0;
       return [this.out()];
     }
 

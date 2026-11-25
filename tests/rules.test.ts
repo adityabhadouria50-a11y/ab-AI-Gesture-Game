@@ -9,7 +9,7 @@ import {
   distToSegment,
   POINTS,
   type Target,
-} from '../src/rules';
+} from '../src/games/starfall/rules';
 
 const testTarget = (
   id: number,

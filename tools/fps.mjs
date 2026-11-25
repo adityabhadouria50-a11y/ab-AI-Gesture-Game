@@ -5,7 +5,7 @@ import { chromium } from 'playwright';
 
 const [, , url = 'http://localhost:5173/?bot=1&mute=1', dpr = '2', warm = '6', secs = '12'] = process.argv;
 const gpu = process.platform === 'darwin' ? ['--use-gl=angle', '--use-angle=metal'] : ['--use-gl=angle'];
-const browser = await chromium.launch({ args: [...gpu, '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--autoplay-policy=no-user-gesture-required', '--mute-audio'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: [...gpu, '--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--autoplay-policy=no-user-gesture-required', '--mute-audio'] });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: Number(dpr) });
 let glInvalid = 0;
 page.on('console', (m) => { if (/GL_INVALID/.test(m.text())) glInvalid++; });

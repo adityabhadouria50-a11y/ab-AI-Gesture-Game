@@ -5,7 +5,7 @@
 import { chromium } from 'playwright';
 
 const [, , url = 'http://localhost:5173/?bot=1', secs = '30'] = process.argv;
-const browser = await chromium.launch({ args: ['--autoplay-policy=no-user-gesture-required'] });
+const browser = await chromium.launch({ executablePath: process.env.CHROME || undefined, args: ['--autoplay-policy=no-user-gesture-required'] });
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 await page.addInitScript(() => {
   const taps = [];

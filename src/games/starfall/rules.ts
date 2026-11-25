@@ -39,6 +39,8 @@ export interface SplitHalf {
   maxLife: number;
   halfIndex: 0 | 1;
   sliceAngle: number;
+  /** Radius of the target it came from. */
+  r: number;
 }
 
 export interface SliceResult {
@@ -227,10 +229,11 @@ function spawnHalves(w: World, t: Target, sliceAngle: number) {
       vy: t.vy * 0.5 + normY * speed * sign - 0.1,
       rot: t.rotation,
       vRot: (w.rand() - 0.5) * 8.0 + sign * 3.0,
-      life: 0.75,
-      maxLife: 0.75,
+      life: 0.9,
+      maxLife: 0.9,
       halfIndex: idx,
       sliceAngle,
+      r: t.r,
     });
   }
 }

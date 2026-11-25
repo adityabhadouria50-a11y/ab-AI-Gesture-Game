@@ -1,84 +1,106 @@
-# Starfall Blade: Celestial Slicer
+# Gesture Arcade
 
-A high-performance AI webcam gesture game built on top of [open-source-hands](https://github.com/abouchedidxcode/open-source-hands) and Google's [MediaPipe Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker).
+Three webcam hand-tracking games that run entirely in your browser, built on
+[open-source-hands](https://github.com/abouchedidxcode/open-source-hands) and Google's
+[MediaPipe Hand Landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/hand_landmarker).
+Your video never leaves your device.
 
-Slice ascending cosmic crystals with your bare hands directly in front of your camera. Chain multi-combos, charge and detonate Pinch Novas, trigger two-hand Cosmic Shockwaves, and dodge dangerous Void Orbs.
+| Game | What you do | Ends when |
+| :--- | :--- | :--- |
+| **Starfall Blade** (3D) | Sweep your palm through rising cosmic crystals, pinch-and-release for a Nova blast, clap for a Shockwave. Dodge red Void Orbs. | 45 s timer |
+| **Neon Strike** (3D) | Make a finger gun, aim with your index finger, drop your thumb to fire, make a fist to reload. Both hands can shoot. Boss every 5th wave. | Your shield hits 0 |
+| **Juice Dojo** (2D) | Swipe your index finger fast to slice tossed fruit. 3+ in one swipe is a combo. Never cut a bomb. | You lose 3 lives |
 
-Everything runs 100% locally in your browser — your webcam video never leaves your device.
+Every game also plays with **mouse or touch**, and the menus work hands-free: with the camera on, point at a button
+and **pinch** (or hold still for a second) to press it.
 
 ---
 
-## How to Play
+## Controls
 
-| Action | Hand Gesture | Mouse / Touch Fallback | Keyboard |
+| | Camera | Mouse / Touch | Keyboard |
 | :--- | :--- | :--- | :--- |
-| **Blade Slash** | Sweep your hand fast through crystals | Drag cursor across crystals | — |
-| **Pinch Nova** | Pinch thumb & index together, then release | Click, hold for 0.2s, release | — |
-| **Cosmic Shockwave** | Clap both open hands together | — | — |
-| **Dodge Void** | Don't slice dark swirling void anomalies! | Avoid clicking/dragging through void | — |
-| **Start / Restart** | Pinch on Title / Results screen | Click "Play" button | **Space** |
-| **Mute Sound** | — | — | **M** |
+| **Starfall** slash | Sweep your hand | Move / drag | — |
+| **Starfall** Nova | Pinch, hold a beat, release | Click and hold, release | — |
+| **Starfall** Shockwave | Clap both hands (6 s cooldown) | — | — |
+| **Neon Strike** aim / fire | Finger gun, drop thumb | Aim, click or hold | — |
+| **Neon Strike** reload | Fist | Right-click | **R** |
+| **Neon Strike** auto-fire | Tick *Auto-fire on target* (accessibility) | | |
+| **Juice Dojo** slice | Fast index-finger swipe | Fast drag / swipe | — |
+| Menus | Point + pinch, or point and hold | Click | **Space** start · **Esc/P** pause · **M** mute |
 
-### Target Types & Scoring
-- 💎 **Astral Crystal (Cyan)**: 100 pts × combo multiplier.
-- 🔮 **Prism Gem (Magenta)**: 200 pts × combo multiplier.
-- 🌟 **Solar Crystal (Gold)**: 350 pts × combo multiplier.
-- ✨ **Nova Star (White)**: 500 pts × combo multiplier + triggers a chain reaction auto-slicing all active crystals!
-- 🕳️ **Void Anomaly (Dark Red/Black)**: -150 pts penalty, breaks combo streak, flashes red warning screen.
+### Scoring
+
+- **Starfall**: crystal 100, prism 200, gold 350, Nova Star 500 (chain-slices everything) × combo up to x10. Void −150 and breaks the combo.
+- **Neon Strike**: drone 100, zig-zagger 150, missile 120, tank 400 (4 hits), boss 5000, × accuracy streak multiplier up to x5 (a miss or a hit on you resets it). Wave-clear bonus; extra bonus for a full shield. Pickups: green +30 shield, yellow 6 s rapid fire (no reloads), white nuke.
+- **Juice Dojo**: 10–15 per fruit, +10 per fruit for 3+ in one swipe. Pink dragonfruit = 5 s Frenzy (fruit rain, misses don't count), blue = Freeze (slow motion), gold = Double points. A life comes back every 750 points.
+
+Best scores are kept per game in `localStorage`.
 
 ---
 
-## Quick Start
+## Quick start
 
 ```bash
-# Ensure Node 20+ is in your PATH
-npm install
-npm run dev
+npm install      # Node 20+
+npm run dev      # also copies MediaPipe's wasm and downloads the hand model (~7.8 MB) on first run
 ```
 
-Open `http://localhost:5173` in Chrome or any modern browser.
-
-> [!NOTE]
-> Webcams require a secure origin (`http://localhost` or `https://`). Click **"Play with Camera"** to grant camera access, or click **"Play with Mouse / Touch"** to play immediately without a camera.
-
----
+Open `http://localhost:5173`. Cameras need a secure origin (`localhost` or `https://`).
 
 ## Commands
 
 ```bash
-npm run dev        # Vite dev server with hot reload
-npm test           # Vitest unit tests (engine, mechanics & gesture detection)
-npm run typecheck  # TypeScript validation
-npm run build      # Production build to dist/
-npm run capture    # Headless GPU Chrome test: bot plays a round & saves screenshots
-npm run capture -- mobile # Same test at mobile viewport (390x844)
-npm run fps        # Frame rate benchmark at DPR 2 (Target: 60 fps, p95 < 16.8 ms)
-npm run loud       # Audio loudness test (Target: p90 -27 to -31 dBFS, peaks < -8)
+npm run dev        # Vite dev server
+npm test           # Vitest: rules for all three games + gesture detection (31 tests)
+npm run typecheck  # TypeScript
+npm run build      # production build to dist/ (relative paths: works from any folder or GitHub Pages)
+npm run capture    # headless GPU Chrome: bots play all three games, screenshots to captures/
+npm run capture -- mobile        # same at 390x844 touch
+npm run capture -- shooter       # just one game
+npm run fps -- "http://localhost:5173/?bot=1&mute=1&game=shooter"   # frame-rate benchmark at DPR 2
+npm run loud       # audio loudness check
 ```
 
----
+If Playwright complains its browser is missing, either run `npx playwright install chromium-headless-shell` or point
+the tools at any existing Chromium with `CHROME=/path/to/chrome npm run capture`.
 
-## URL Flags & Test Hooks
+## URL flags
 
-| Flag | Description |
+| Flag | Effect |
 | :--- | :--- |
-| `?bot=1` | Runs synthetic AI player steering through the gesture engine |
-| `?autostart=1` | Bypasses title screen immediately into play mode |
-| `?mute=1` | Mutes procedural audio |
-| `?seed=N` | Deterministic PRNG seed for reproducible rounds |
-| `?round=S` | Custom round duration in seconds (default: 45) |
-| `?speed=K` | Game speed multiplier (e.g. `?speed=2`) |
+| `?game=starfall\|shooter\|fruit` | Open that game's intro directly |
+| `?bot=1` | A synthetic player drives synthetic hands through the real gesture engine (use with `?game=`) |
+| `?autostart=1` | Skip the menus, play with mouse / touch |
+| `?mute=1` | No sound |
+| `?seed=N` | Deterministic round |
+| `?round=S` | Starfall round length |
+| `?wave=N` | Neon Strike starting wave (`?wave=5` = boss) |
+| `?speed=K` | Game speed multiplier |
 
-Test automation hook `window.__game` exposes:
-`{ phase, score, slicedCount, maxCombo, combo, time, targetsCount, mode, handsCount, fps, dpr, best }`.
+Test hook: `window.__game.snapshot()` returns the current screen, game, mode, fps and that game's stats.
 
 ---
 
 ## Architecture
 
-- **`src/hand-gesture-kit/`**: MediaPipe Hand Landmarker + One Euro smoothing + pose & motion recognition engine.
-- **`src/rules.ts`**: Pure mathematical game simulation (targets, trajectories, slicing segments, combos, split halves).
-- **`src/scene.ts`**: High-performance Three.js 3D rendering (deep space nebulae, rotating 3D crystals, dynamic plasma ribbon trails, spark bursts).
-- **`src/audio.ts`**: Pure procedural Web Audio API synthesis (ambient pads, blade swooshes, pentatonic chimes, sub-bass explosions).
-- **`src/bot.ts`**: Autonomous bot controlling synthetic hand landmarks to slice crystals and trigger combos.
-- **`src/input.ts`**: Unified input adapter translating camera, pointer, and bot sources into standard hand landmarks.
+```
+src/
+  main.ts                  shell: hub, intro / pause / results cards, countdown, hand cursor, best scores, test hook
+  style.css
+  core/
+    types.ts               the Game interface every game implements
+    input.ts               camera + mouse/touch + bot → one HandView list (palm, fingertip, speed, pinch, pose)
+    audio.ts               procedural Web Audio for all games (no audio files)
+    ribbon.ts              Three.js helpers: glowing ribbon trail, pooled sparks, glow textures, disposal
+    pinch.ts               pinch press/release latch with hysteresis
+  games/
+    starfall/  rules.ts · scene.ts (Three.js) · bot.ts · index.ts
+    shooter/   rules.ts · scene.ts (Three.js) · index.ts (trigger detection + bot)
+    fruit/     rules.ts · render.ts (Canvas 2D) · index.ts (+ bot)
+  hand-gesture-kit/        MediaPipe tracking, One Euro smoothing, pose & motion engine (MIT)
+```
+
+Each game's `rules.ts` is pure and deterministic (seeded RNG, no DOM), which is what the unit tests cover. The renderers
+read the world and draw it; the shell shares one WebGL renderer between the 3D games so switching never leaks a
+context. All art is procedural (canvas-painted or geometry), all sound is synthesised.

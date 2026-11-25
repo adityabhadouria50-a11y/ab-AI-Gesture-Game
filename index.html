@@ -2,97 +2,138 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Starfall Blade: Celestial Slicer</title>
-    <meta name="description" content="Slice ascending cosmic crystals with your bare hands in front of the webcam. AI gesture game powered by MediaPipe." />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#07050f" />
+    <title>Gesture Arcade</title>
+    <meta name="description" content="Three webcam hand-tracking games in your browser: Starfall Blade, Neon Strike and Juice Dojo. Powered by MediaPipe, runs 100% on your device." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpolygon points='16,3 29,16 16,29 3,16' fill='%2338bdf8'/%3E%3C/svg%3E" />
   </head>
   <body>
-    <div id="stage"></div>
+    <div id="stage">
+      <canvas id="gl"></canvas>
+      <canvas id="c2d"></canvas>
+    </div>
     <video id="cam" playsinline muted></video>
-    <div id="cam-container" class="hidden">
-      <canvas id="preview" width="220" height="165"></canvas>
-      <div id="cam-status">AI Vision Tracking</div>
+
+    <div id="hud"></div>
+    <div id="fx"><div id="banner"></div></div>
+    <div id="countdown" class="hidden"></div>
+    <div id="hand-hint" class="hidden">✋ Show your hand to the camera</div>
+
+    <div id="controls" class="hidden">
+      <button id="b-pause" class="icon-btn" title="Pause (Esc)" aria-label="Pause">⏸</button>
+      <button id="b-mute" class="icon-btn" title="Mute (M)" aria-label="Mute">🔊</button>
     </div>
 
-    <!-- HUD -->
-    <div id="hud" class="hud hidden">
-      <div class="hud-left">
-        <span class="hud-label">SCORE</span>
-        <span id="score" class="hud-val">0</span>
-      </div>
-      <div class="hud-center">
-        <div id="combo-badge" class="combo-badge hidden">
-          <span id="combo-text">x2 COMBO</span>
-        </div>
-      </div>
-      <div class="hud-right">
-        <span class="hud-label">TIME</span>
-        <span id="time" class="hud-val">45s</span>
-      </div>
+    <div id="cam-pip" class="hidden">
+      <canvas id="preview" width="224" height="168"></canvas>
+      <div id="cam-status">Looking for hands…</div>
     </div>
 
-    <!-- Title Screen -->
-    <section id="title" class="card">
-      <div class="badge">AI WEBCAM GESTURE GAME</div>
-      <h1>STARFALL BLADE</h1>
-      <p class="subtitle">Celestial Slicer</p>
+    <!-- Hub -->
+    <section id="hub" class="screen">
+      <header class="hub-head">
+        <div class="badge">AI WEBCAM GESTURE GAMES</div>
+        <h1 class="logo">Gesture <span>Arcade</span></h1>
+        <p class="subtitle">Three games. No controller. Your hands are the joystick.</p>
+      </header>
 
-      <div class="gesture-showcase">
-        <div class="gesture-item">
-          <div class="gesture-icon">⚔️</div>
-          <div class="gesture-title">Blade Slash</div>
-          <div class="gesture-desc">Sweep your hand fast to slice crystals</div>
+      <div class="controller">
+        <button id="b-cam" class="btn-primary">📷 Enable Camera</button>
+        <div class="seg" role="radiogroup" aria-label="Controller">
+          <button id="m-cam" class="seg-btn" role="radio" disabled>Hands</button>
+          <button id="m-ptr" class="seg-btn on" role="radio">Mouse / Touch</button>
         </div>
-        <div class="gesture-item">
-          <div class="gesture-icon">🤏</div>
-          <div class="gesture-title">Pinch Nova</div>
-          <div class="gesture-desc">Pinch & release to burst nearby targets</div>
-        </div>
-        <div class="gesture-item">
-          <div class="gesture-icon">👏</div>
-          <div class="gesture-title">Cosmic Clap</div>
-          <div class="gesture-desc">Clap hands to clear void anomalies</div>
-        </div>
-      </div>
-
-      <div class="warning-note">
-        ⚠️ <b>Avoid dark Void Orbs</b> — slicing them breaks your combo and deducts score!
-      </div>
-
-      <div class="row">
-        <button id="b-cam" class="btn-primary">Play with Camera</button>
-        <button id="b-mouse" class="btn-secondary">Play with Mouse / Touch</button>
       </div>
       <p id="err" class="err"></p>
+
+      <div class="cards">
+        <button class="game-card" data-game="starfall" style="--accent:#38bdf8">
+          <svg class="art" viewBox="0 0 120 90" aria-hidden="true">
+            <defs><linearGradient id="gs" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#bae6fd"/><stop offset="1" stop-color="#0284c7"/></linearGradient></defs>
+            <circle cx="20" cy="18" r="1.2" fill="#fff"/><circle cx="96" cy="12" r="1" fill="#fff"/><circle cx="104" cy="60" r="1.4" fill="#fff"/><circle cx="12" cy="66" r="1" fill="#fff"/>
+            <polygon points="60,12 82,40 60,78 38,40" fill="url(#gs)"/><polygon points="60,12 82,40 60,46" fill="#e0f2fe" opacity=".7"/>
+            <polygon points="92,30 100,40 92,52 84,40" fill="#f0abfc"/><polygon points="26,36 33,44 26,54 19,44" fill="#fde047"/>
+            <path d="M14 76 L106 14" stroke="#fff" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+          </svg>
+          <span class="card-name">Starfall Blade</span>
+          <span class="card-tag">Slice cosmic crystals, chain combos, pinch-blast novas.</span>
+          <span class="card-foot"><span class="best" data-best="starfall">Best —</span><span class="play">Play ▸</span></span>
+        </button>
+        <button class="game-card" data-game="shooter" style="--accent:#f472b6">
+          <svg class="art" viewBox="0 0 120 90" aria-hidden="true">
+            <defs><linearGradient id="gn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fde047"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs>
+            <circle cx="60" cy="54" r="20" fill="url(#gn)"/><rect x="36" y="58" width="48" height="2" fill="#1a0636"/><rect x="36" y="64" width="48" height="3" fill="#1a0636"/>
+            <path d="M0 72 H120 M10 90 L40 72 M40 90 L52 72 M80 90 L68 72 M110 90 L80 72" stroke="#ff2fd0" stroke-width="1.5"/>
+            <circle cx="84" cy="26" r="11" fill="none" stroke="#fff" stroke-width="2.5"/><path d="M84 10v8 M84 34v8 M68 26h8 M92 26h8" stroke="#fff" stroke-width="2.5"/>
+            <polygon points="30,22 38,28 30,34 22,28" fill="#22d3ee"/>
+          </svg>
+          <span class="card-name">Neon Strike</span>
+          <span class="card-tag">Finger-gun shooter. Survive waves, beat the boss.</span>
+          <span class="card-foot"><span class="best" data-best="shooter">Best —</span><span class="play">Play ▸</span></span>
+        </button>
+        <button class="game-card" data-game="fruit" style="--accent:#fb923c">
+          <svg class="art" viewBox="0 0 120 90" aria-hidden="true">
+            <path d="M28 60 a24 24 0 0 1 48 0 z" fill="#2f8f3a"/><path d="M31 60 a21 21 0 0 1 42 0 z" fill="#ff3b4f"/>
+            <circle cx="44" cy="52" r="1.6" fill="#111"/><circle cx="52" cy="46" r="1.6" fill="#111"/><circle cx="60" cy="52" r="1.6" fill="#111"/>
+            <path d="M40 66 a20 20 0 0 0 40 0 z" fill="#2f8f3a" transform="rotate(14 60 66)"/>
+            <circle cx="92" cy="30" r="12" fill="#ff9418"/><circle cx="88" cy="26" r="3" fill="#ffd27a"/>
+            <path d="M10 20 L112 80" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="26" cy="74" r="3" fill="#ff5a6e"/><circle cx="100" cy="64" r="2" fill="#ffb347"/>
+          </svg>
+          <span class="card-name">Juice Dojo</span>
+          <span class="card-tag">Slash flying fruit with your finger. Dodge the bombs.</span>
+          <span class="card-foot"><span class="best" data-best="fruit">Best —</span><span class="play">Play ▸</span></span>
+        </button>
+      </div>
+
       <p class="privacy-note">
-        🔒 Video is processed entirely on your device with MediaPipe. Never sent to any server.<br />
-        Controls: Space starts/restarts, M mutes audio.
+        🔒 Video is processed on your device by MediaPipe and never leaves it.
+        <span class="hint-gesture">With the camera on, point at a button and <b>pinch</b> (or hold still) to press it.</span>
       </p>
     </section>
 
-    <!-- Results Screen -->
+    <!-- Game intro -->
+    <section id="intro" class="card hidden">
+      <div class="badge" id="i-badge">GAME</div>
+      <h2 id="i-name" class="title">Game</h2>
+      <p id="i-tag" class="subtitle"></p>
+      <div id="i-how" class="gesture-showcase"></div>
+      <div id="i-tip" class="tip-note"></div>
+      <div class="row">
+        <button id="b-start" class="btn-primary">Start</button>
+        <button id="b-back" class="btn-secondary">◂ Menu</button>
+      </div>
+      <p id="i-best" class="best-line"></p>
+      <p class="privacy-note small" id="i-hint">Space to start · Esc to pause · M to mute</p>
+    </section>
+
+    <!-- Results -->
     <section id="results" class="card hidden">
-      <div class="badge">ROUND COMPLETE</div>
-      <h2 id="r-title">Cosmic Mastery</h2>
+      <div class="badge" id="r-badge">GAME OVER</div>
+      <h2 id="r-title" class="title">Well played</h2>
       <p class="label">FINAL SCORE</p>
       <p id="r-score" class="big-score">0</p>
-      <div class="stats-row">
-        <div class="stat-box">
-          <span class="stat-num" id="r-sliced">0</span>
-          <span class="stat-lbl">Crystals Sliced</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-num" id="r-combo">1x</span>
-          <span class="stat-lbl">Max Combo</span>
-        </div>
-      </div>
-      <p id="r-best" class="best-line">Best Score: 0</p>
+      <p id="r-best" class="best-line"></p>
+      <div id="r-stats" class="stats-row"></div>
       <div class="row">
-        <button id="b-restart" class="btn-primary">Play Again</button>
+        <button id="b-again" class="btn-primary">Play Again</button>
+        <button id="b-menu" class="btn-secondary">◂ Menu</button>
       </div>
-      <p class="privacy-note">Pinch, click or press Space to play again.</p>
     </section>
+
+    <!-- Pause -->
+    <section id="pause" class="card hidden">
+      <div class="badge">PAUSED</div>
+      <h2 class="title">Take a breath</h2>
+      <div class="row">
+        <button id="b-resume" class="btn-primary">Resume</button>
+        <button id="b-restart" class="btn-secondary">Restart</button>
+        <button id="b-quit" class="btn-secondary">◂ Menu</button>
+      </div>
+    </section>
+
+    <div id="cursor" class="hidden"><svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18"/></svg><i></i></div>
 
     <script type="module" src="/src/main.ts"></script>
   </body>
