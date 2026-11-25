@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createWorld, startGame, step, fire, reload, project, ray, raySphere, pick, CAM, MAG, RELOAD_S, MAX_SHIELD, type Enemy, type World } from '../src/games/shooter/rules';
+import { createWorld, startGame, step, fire, reload, project, ray, raySphere, pick, spawn, halfWidth, CAM, MAG, RELOAD_S, MAX_LIVES, type Bird, type World } from '../src/games/shooter/rules';
 
 const A = 16 / 9;
-const enemy = (id: number, x: number, y: number, z: number, kind: Enemy['kind'] = 'drone', hp = 1): Enemy => ({
-  id, kind, x, y, z, sx: x, sy: y, sz: z, tx: 0, ty: CAM.y, speed: 0, r: 0.85, hp, maxHp: hp, t: 0, seed: 0, fireIn: 9, hitFlash: 0,
+const bird = (id: number, x: number, y: number, z: number, kind: Bird['kind'] = 'sparrow', hp = 1): Bird => ({
+  id, kind, x, y, z, dir: 1, vx: 0, baseY: y, amp: 0, freq: 1, exitX: 999, r: 0.75, hp, maxHp: hp, t: 0, seed: 0, hitFlash: 0,
 });
 const fresh = (): World => {
   const w = createWorld(7);
@@ -13,9 +13,9 @@ const fresh = (): World => {
   w.waveState = 'fight';
   return w;
 };
-const aimAt = (e: Enemy) => project(e.x, e.y, e.z, A);
+const aimAt = (e: Bird) => project(e.x, e.y, e.z, A);
 
-describe('neon strike rules', () => {
+describe('sky hunter rules', () => {
   it('project and ray are inverses', () => {
     const p = project(3, 4, -20, A);
     const d = ray(p.sx, p.sy, A);
@@ -30,13 +30,39 @@ describe('neon strike rules', () => {
     expect(raySphere(ray(p.sx + 0.2, p.sy, A), 0, 3, -30, 1)).toBe(-1);
   });
 
-  it('a shot on target kills a drone, uses one round and scores', () => {
+  it('birds enter from one side, fly across horizontally and leave from the other', () => {
     const w = fresh();
-    const e = enemy(1, 2, 3, -25);
-    w.enemies = [e];
+    for (const dir of [1, -1] as const) {
+      const b = spawn(w, 'sparrow', A, { dir, z: -25 });
+      const p = project(b.x, b.y, b.z, A);
+      expect(dir > 0 ? p.sx < 0 : p.sx > 1).toBe(true); // starts just off-screen
+      expect(Math.sign(b.vx)).toBe(dir);
+      // a calm crossing: several seconds, not a blur
+      const crossS = (2 * halfWidth(b.z, A)) / Math.abs(b.vx);
+      expect(crossS).toBeGreaterThan(4);
+      expect(crossS).toBeLessThan(10);
+    }
+  });
+
+  it('a bird that crosses the whole screen escapes and costs a heart', () => {
+    const w = fresh();
+    w.birds = [];
+    const b = spawn(w, 'sparrow', A, { dir: -1, z: -20 });
+    for (let i = 0; i < 60 * 12 && w.birds.length; i++) step(w, 1 / 60, A);
+    expect(w.birds).toHaveLength(0);
+    expect(w.escaped).toBe(1);
+    expect(w.lives).toBe(MAX_LIVES - 1);
+    expect(w.events.some((e) => e.type === 'escape' && e.dir === b.dir)).toBe(true);
+  });
+
+  it('a shot on target downs a bird, uses one round, scores, and it falls', () => {
+    const w = fresh();
+    const e = bird(1, 2, 5, -25);
+    w.birds = [e];
     const p = aimAt(e);
     expect(fire(w, p.sx, p.sy, A)).toBe(true);
-    expect(w.enemies).toHaveLength(0);
+    expect(w.birds).toHaveLength(0);
+    expect(w.fallers).toHaveLength(1);
     expect(w.ammo).toBe(MAG - 1);
     expect(w.kills).toBe(1);
     expect(w.score).toBe(100);
@@ -44,29 +70,27 @@ describe('neon strike rules', () => {
 
   it('aim assist forgives a near miss, a wide miss breaks the streak', () => {
     const w = fresh();
-    const e = enemy(1, 0, CAM.y, -30);
-    w.enemies = [e];
+    const e = bird(1, 0, CAM.y + 2, -30);
+    w.birds = [e];
     const p = aimAt(e);
-    const edge = 0.85 * p.scale; // sphere radius on screen
+    const edge = e.r * p.scale;
     expect(pick(w, p.sx + (edge + 0.02) / A, p.sy, A)?.e.id).toBe(1);
     expect(pick(w, p.sx + (edge + 0.2) / A, p.sy, A)).toBeNull();
     w.streak = 4;
-    fire(w, 0.02, 0.02, A);
+    fire(w, 0.02, 0.98, A);
     expect(w.streak).toBe(0);
   });
 
-  it('tanks take several hits', () => {
+  it('geese take two hits', () => {
     const w = fresh();
-    const e = enemy(1, 0, 3, -20, 'tank', 4);
-    w.enemies = [e];
+    const e = { ...bird(1, 0, 5, -20, 'goose', 2), r: 1.1 };
+    w.birds = [e];
     const p = aimAt(e);
-    for (let i = 0; i < 3; i++) {
-      fire(w, p.sx, p.sy, A);
-      w.fireCd = 0;
-    }
-    expect(w.enemies).toHaveLength(1);
     fire(w, p.sx, p.sy, A);
-    expect(w.enemies).toHaveLength(0);
+    expect(w.birds).toHaveLength(1);
+    w.fireCd = 0;
+    fire(w, p.sx, p.sy, A);
+    expect(w.birds).toHaveLength(0);
   });
 
   it('an empty gun clicks and reloads itself; reload refills after RELOAD_S', () => {
@@ -74,36 +98,33 @@ describe('neon strike rules', () => {
     w.ammo = 0;
     expect(fire(w, 0.5, 0.5, A)).toBe(false);
     expect(w.events.some((e) => e.type === 'empty')).toBe(true);
-    expect(w.reloadT).toBeGreaterThan(0);
-    for (let t = 0; t < RELOAD_S + 0.1; t += 1 / 60) step(w, 1 / 60);
+    for (let t = 0; t < RELOAD_S + 0.1; t += 1 / 60) step(w, 1 / 60, A);
     expect(w.ammo).toBe(MAG);
     expect(reload(w)).toBe(false); // already full
   });
 
-  it('an enemy that reaches you drains the shield; zero shield ends the game', () => {
+  it('balloons give power-ups', () => {
     const w = fresh();
-    w.enemies = [{ ...enemy(1, 0, CAM.y, -2), speed: 30 }];
-    step(w, 0.1);
-    expect(w.shield).toBeLessThan(MAX_SHIELD);
-    w.shield = 1;
-    w.enemies = [{ ...enemy(2, 0, CAM.y, -2), speed: 30 }];
-    step(w, 0.1);
+    w.lives = 3;
+    const b = { ...bird(1, 0, 3, -15, 'balloon'), pickup: 'life' as const };
+    w.birds = [b];
+    const p = aimAt(b);
+    fire(w, p.sx, p.sy, A);
+    expect(w.lives).toBe(4);
+  });
+
+  it('losing every heart ends the game; a clean wave moves on', () => {
+    const w = fresh();
+    w.lives = 1;
+    w.birds = [{ ...bird(1, 0, 5, -20), x: 998, vx: 10 }];
+    step(w, 0.5, A);
     expect(w.phase).toBe('over');
-  });
 
-  it('every fifth wave brings a boss', () => {
-    const w = createWorld(3);
-    startGame(w, 5);
-    for (let i = 0; i < 200; i++) step(w, 1 / 60);
-    expect(w.enemies.some((e) => e.kind === 'boss')).toBe(true);
-  });
-
-  it('a clean wave advances to the next one', () => {
-    const w = fresh();
-    w.enemies = [];
-    step(w, 1 / 60);
-    expect(w.waveState).toBe('clear');
-    for (let i = 0; i < 120; i++) step(w, 1 / 60);
-    expect(w.wave).toBe(2);
+    const c = fresh();
+    c.birds = [];
+    step(c, 1 / 60, A);
+    expect(c.waveState).toBe('clear');
+    for (let i = 0; i < 150; i++) step(c, 1 / 60, A);
+    expect(c.wave).toBe(2);
   });
 });

@@ -1,102 +1,137 @@
 /**
- * Neon Strike 3D scene: synthwave sky, striped sun, scrolling neon grid, wireframe mountains, enemy models,
- * a boss saucer, two hand-held blasters with recoil, laser tracers, explosions and hit flashes.
+ * Sky Hunter 3D scene: a sunny countryside (sky dome, sun, drifting clouds, mountains, hills, tree line, meadow),
+ * low-poly birds that flap and face the way they fly, power-up balloons, shot birds tumbling down in a puff of
+ * feathers, and a hand-held blaster with recoil and tracers.
  * Uses the same camera as rules.ts (FOV, CAM), so what you aim at is what you hit.
  */
 import * as THREE from 'three';
-import { FOV, CAM, type Enemy, type EnemyKind, type World } from './rules';
+import { FOV, CAM, PITCH, type Bird, type BirdKind, type World } from './rules';
 import { Sparks, glowTexture, disposeTree } from '../../core/ribbon';
 
-const COL: Record<EnemyKind, number> = {
-  drone: 0x22d3ee,
-  zig: 0xf472b6,
-  tank: 0xfb923c,
-  missile: 0xff3355,
-  boss: 0xa855f7,
-  pickup: 0xffffff,
-};
-const PICKUP_COL = { shield: 0x4ade80, rapid: 0xfacc15, nuke: 0xffffff } as const;
-const SPARK: Record<EnemyKind, string> = {
-  drone: '90,230,255',
-  zig: '255,120,210',
-  tank: '255,170,80',
-  missile: '255,80,100',
-  boss: '190,120,255',
-  pickup: '255,255,255',
-};
+interface Look {
+  body: number;
+  belly: number;
+  wing: number;
+  head: number;
+  beak: number;
+  size: number;
+}
 
-function skyTexture(): THREE.CanvasTexture {
+const LOOK: Record<Exclude<BirdKind, 'balloon'>, Look> = {
+  sparrow: { body: 0x8a5a3b, belly: 0xe8d2b0, wing: 0x5e3b24, head: 0x6b4a33, beak: 0xf2b134, size: 0.75 },
+  swift: { body: 0x23395d, belly: 0xf2f2f2, wing: 0x15233d, head: 0x1b2c4a, beak: 0x333333, size: 0.62 },
+  goose: { body: 0x8d8f94, belly: 0xf3f3f0, wing: 0x6d6f75, head: 0x1d1d1d, beak: 0xf08a24, size: 1.15 },
+  golden: { body: 0xffc928, belly: 0xfff2a8, wing: 0xe6a700, head: 0xffd94a, beak: 0xff7a1a, size: 0.72 },
+};
+const FEATHER: Record<BirdKind, number[]> = {
+  sparrow: [0x8a5a3b, 0xe8d2b0, 0x5e3b24],
+  swift: [0x23395d, 0xf2f2f2],
+  goose: [0x8d8f94, 0xf3f3f0],
+  golden: [0xffc928, 0xfff2a8, 0xffffff],
+  balloon: [0xef4444, 0xfacc15, 0x38bdf8, 0xffffff],
+};
+const BALLOON = { life: 0xef4444, rapid: 0xfacc15, slowmo: 0x38bdf8 } as const;
+
+function canvasTex(w: number, h: number, paint: (g: CanvasRenderingContext2D) => void) {
   const c = document.createElement('canvas');
-  c.width = 16;
-  c.height = 512;
-  const g = c.getContext('2d')!;
-  const grd = g.createLinearGradient(0, 0, 0, 512);
-  grd.addColorStop(0, '#05010f');
-  grd.addColorStop(0.45, '#1a0636');
-  grd.addColorStop(0.72, '#4a0d5e');
-  grd.addColorStop(0.86, '#b3206e');
-  grd.addColorStop(1, '#ff6a3d');
-  g.fillStyle = grd;
-  g.fillRect(0, 0, 16, 512);
+  c.width = w;
+  c.height = h;
+  paint(c.getContext('2d')!);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 
-function sunTexture(): THREE.CanvasTexture {
-  const S = 512;
-  const c = document.createElement('canvas');
-  c.width = c.height = S;
-  const g = c.getContext('2d')!;
-  const grd = g.createLinearGradient(0, 0, 0, S);
-  grd.addColorStop(0, '#fff27a');
-  grd.addColorStop(0.5, '#ff9a3d');
-  grd.addColorStop(1, '#ff2a7a');
-  g.fillStyle = grd;
-  g.beginPath();
-  g.arc(S / 2, S / 2, S * 0.48, 0, Math.PI * 2);
-  g.fill();
-  // horizontal slats cut out of the lower half
-  g.globalCompositeOperation = 'destination-out';
-  for (let i = 0; i < 9; i++) {
-    const y = S * 0.55 + i * S * 0.05;
-    g.fillRect(0, y, S, 3 + i * 2.2);
-  }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
+const skyTexture = () =>
+  canvasTex(16, 512, (g) => {
+    const grd = g.createLinearGradient(0, 0, 0, 512);
+    grd.addColorStop(0, '#2f6fd6');
+    grd.addColorStop(0.55, '#6fb2f2');
+    grd.addColorStop(0.85, '#bfe3ff');
+    grd.addColorStop(1, '#ffe9c2');
+    g.fillStyle = grd;
+    g.fillRect(0, 0, 16, 512);
+  });
+
+const cloudTexture = (seed: number) =>
+  canvasTex(512, 256, (g) => {
+    let s = seed;
+    const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < 26; i++) {
+      const x = 90 + rnd() * 330;
+      const y = 130 + (rnd() - 0.5) * 60 - Math.sin(((x - 90) / 330) * Math.PI) * 30;
+      const r = 40 + rnd() * 55;
+      const grd = g.createRadialGradient(x, y - r * 0.2, 0, x, y, r);
+      grd.addColorStop(0, 'rgba(255,255,255,0.95)');
+      grd.addColorStop(0.6, 'rgba(255,255,255,0.75)');
+      grd.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = grd;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    // soft blue-grey underside
+    g.globalCompositeOperation = 'source-atop';
+    const sh = g.createLinearGradient(0, 110, 0, 220);
+    sh.addColorStop(0, 'rgba(160,185,215,0)');
+    sh.addColorStop(1, 'rgba(160,185,215,0.55)');
+    g.fillStyle = sh;
+    g.fillRect(0, 0, 512, 256);
+  });
+
+const grassTexture = () => {
+  const t = canvasTex(256, 256, (g) => {
+    g.fillStyle = '#5fa83a';
+    g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 2600; i++) {
+      g.fillStyle = Math.random() < 0.5 ? 'rgba(40,110,30,0.35)' : 'rgba(150,210,90,0.3)';
+      g.fillRect(Math.random() * 256, Math.random() * 256, 1.5, 3 + Math.random() * 4);
+    }
+  });
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(40, 30);
+  t.anisotropy = 8;
   return t;
+};
+
+const featherTexture = () =>
+  canvasTex(32, 64, (g) => {
+    g.fillStyle = '#fff';
+    g.beginPath();
+    g.ellipse(16, 30, 9, 26, 0, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = 'rgba(0,0,0,0.35)';
+    g.lineWidth = 1.5;
+    g.beginPath();
+    g.moveTo(16, 4);
+    g.lineTo(16, 62);
+    g.stroke();
+  });
+
+/** A wing: a flat swept quad pivoting at the shoulder (origin), reaching out along +z (near) or −z (far). */
+function wingGeometry(side: 1 | -1) {
+  const g = new THREE.BufferGeometry();
+  const v = [0.35, 0, 0, -0.35, 0, 0, -0.55, 0.02, side * 1.25, 0.05, 0.02, side * 0.95];
+  g.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
+  g.setIndex(side === 1 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2]);
+  g.computeVertexNormals();
+  return g;
 }
 
-const GRID_VS = /* glsl */ `
-  varying vec3 vPos;
-  void main() {
-    vPos = (modelMatrix * vec4(position, 1.0)).xyz;
-    gl_Position = projectionMatrix * viewMatrix * vec4(vPos, 1.0);
-  }`;
-const GRID_FS = /* glsl */ `
-  uniform float uTime;
-  uniform vec3 uColor;
-  uniform float uPulse;
-  varying vec3 vPos;
-  // 1 on the grid line through every integer v, anti-aliased with screen-space derivatives
-  float gridLine(float v, float w) {
-    float d = abs(fract(v - 0.5) - 0.5);
-    float fw = fwidth(v);
-    return 1.0 - smoothstep(w, w + fw * 1.5, d);
-  }
-  void main() {
-    vec2 p = vec2(vPos.x / 4.0, (vPos.z + uTime * 14.0) / 4.0);
-    float g = max(gridLine(p.x, 0.018), gridLine(p.y, 0.018));
-    float dist = clamp(-vPos.z / 140.0, 0.0, 1.0);
-    float fade = 1.0 - dist;
-    vec3 base = mix(vec3(0.03, 0.0, 0.08), vec3(0.18, 0.0, 0.2), dist);
-    vec3 col = base + uColor * g * fade * (1.2 + uPulse) + uColor * 0.15 * pow(dist, 3.0);
-    gl_FragColor = vec4(col, 1.0);
-  }`;
-
-interface Tracer {
-  mesh: THREE.Mesh;
+interface Feather {
+  s: THREE.Sprite;
+  vx: number;
+  vy: number;
+  vz: number;
+  spin: number;
   life: number;
+}
+
+interface Vis {
+  g: THREE.Group;
+  wings: THREE.Object3D[];
+  mats: THREE.MeshStandardMaterial[];
+  hp?: THREE.Mesh;
 }
 
 interface Gun {
@@ -109,135 +144,128 @@ interface Gun {
 
 export class ShooterScene {
   readonly scene = new THREE.Scene();
-  readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 400);
-  readonly sparks = new Sparks(900);
+  readonly camera = new THREE.PerspectiveCamera(FOV, 1, 0.05, 600);
+  readonly sparks = new Sparks(300);
 
-  private grid: THREE.Mesh;
-  private gridMat: THREE.ShaderMaterial;
-  private sky: THREE.Mesh;
-  private sun: THREE.Mesh;
-  private enemies = new Map<number, { g: THREE.Group; mats: THREE.MeshStandardMaterial[]; hp?: THREE.Mesh }>();
+  private birds = new Map<number, Vis>();
+  private fallers = new Map<number, Vis>();
   private geos: Record<string, THREE.BufferGeometry> = {};
-  private halo: Record<EnemyKind, THREE.SpriteMaterial> = {} as Record<EnemyKind, THREE.SpriteMaterial>;
-  private tracers: Tracer[] = [];
-  private tracerGeo = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
+  private clouds: { s: THREE.Sprite; v: number }[] = [];
+  private feathers: Feather[] = [];
+  private featherTex = featherTexture();
+  private tracers: { mesh: THREE.Mesh; life: number }[] = [];
   private guns: Gun[] = [];
   private flashTex = glowTexture('255,230,160');
-  private boomLight: THREE.PointLight;
-  private rings: { m: THREE.Mesh; t: number; max: number; size: number }[] = [];
-  private ringGeo = new THREE.RingGeometry(0.85, 1, 48);
-  private pulse = 0;
 
   constructor(private gl: THREE.WebGLRenderer) {
     this.camera.position.set(CAM.x, CAM.y, CAM.z);
-    this.scene.fog = new THREE.Fog(0x16052a, 40, 170);
+    this.camera.rotation.x = PITCH;
+    this.scene.fog = new THREE.Fog(0xcfe8ff, 80, 420);
     this.scene.add(this.camera);
 
-    // sky dome
-    const skyMat = new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false, depthWrite: false });
-    this.sky = new THREE.Mesh(new THREE.SphereGeometry(300, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2 + 0.05), skyMat);
-    this.sky.position.y = -2;
-    this.scene.add(this.sky);
-    // stars in the upper sky
-    const sp = new Float32Array(500 * 3);
-    for (let i = 0; i < 500; i++) {
-      const a = Math.random() * Math.PI - Math.PI, el = 0.12 + Math.random() * 1.2;
-      sp[i * 3] = Math.cos(a) * Math.cos(el) * 250;
-      sp[i * 3 + 1] = Math.sin(el) * 250;
-      sp[i * 3 + 2] = Math.sin(a) * Math.cos(el) * 250;
-    }
-    const sgeo = new THREE.BufferGeometry();
-    sgeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
-    this.scene.add(new THREE.Points(sgeo, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.8 })));
-
-    this.sun = new THREE.Mesh(
-      new THREE.PlaneGeometry(1, 1),
-      new THREE.MeshBasicMaterial({ map: sunTexture(), transparent: true, fog: false, depthWrite: false })
+    const sky = new THREE.Mesh(
+      new THREE.SphereGeometry(500, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2 + 0.1),
+      new THREE.MeshBasicMaterial({ map: skyTexture(), side: THREE.BackSide, fog: false, depthWrite: false })
     );
-    this.sun.scale.setScalar(110);
-    this.sun.position.set(0, 22, -260);
-    this.scene.add(this.sun);
-    const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture('255,90,140'), transparent: true, opacity: 0.6, fog: false, depthWrite: false, blending: THREE.AdditiveBlending }));
-    sunGlow.scale.setScalar(260);
-    sunGlow.position.set(0, 20, -262);
-    this.scene.add(sunGlow);
+    sky.position.y = -10;
+    this.scene.add(sky);
 
-    // mountains: low-poly ridges on both sides
-    for (const side of [-1, 1]) {
-      const pts: number[] = [];
-      let x = side * 22;
-      const ridge: [number, number][] = [];
-      for (let i = 0; i < 14; i++) {
-        ridge.push([x, 2 + Math.random() * (10 + i * 1.2)]);
-        x += side * (6 + Math.random() * 6);
-      }
-      for (let i = 0; i < ridge.length - 1; i++) {
-        const [x0, y0] = ridge[i], [x1, y1] = ridge[i + 1];
-        pts.push(x0, 0, -150, x0, y0, -150, x0, y0, -150, x1, y1, -150);
-        pts.push(x0, y0, -150, (x0 + x1) / 2, 0, -150);
-      }
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
-      this.scene.add(new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0xff3fa4, transparent: true, opacity: 0.75, fog: false })));
-      const fill = new THREE.Shape();
-      fill.moveTo(ridge[0][0], 0);
-      for (const [rx, ry] of ridge) fill.lineTo(rx, ry);
-      fill.lineTo(ridge[ridge.length - 1][0], 0);
-      const m = new THREE.Mesh(new THREE.ShapeGeometry(fill), new THREE.MeshBasicMaterial({ color: 0x12031f, fog: false, side: THREE.DoubleSide }));
-      m.position.z = -150.5;
+    const sun = new THREE.Sprite(
+      new THREE.SpriteMaterial({ map: glowTexture('255,244,200'), fog: false, depthWrite: false, transparent: true, blending: THREE.AdditiveBlending })
+    );
+    sun.scale.setScalar(160);
+    sun.position.set(120, 150, -420);
+    this.scene.add(sun);
+
+    // clouds drift slowly at several depths
+    for (let i = 0; i < 9; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: cloudTexture(11 + i * 7), fog: false, depthWrite: false, transparent: true, opacity: 0.92 }));
+      const z = -160 - Math.random() * 200;
+      const wd = 50 + Math.random() * 70;
+      s.scale.set(wd, wd / 2, 1);
+      s.position.set((Math.random() - 0.5) * 500, 40 + Math.random() * 110 + (-z - 160) * 0.2, z);
+      this.scene.add(s);
+      this.clouds.push({ s, v: 1.2 + Math.random() * 2 });
+    }
+
+    // distant mountains, rolling hills, a tree line, then the meadow
+    const ridge = (z: number, color: number, height: number, bumps: number, seed: number) => {
+      let s = seed;
+      const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+      const shape = new THREE.Shape();
+      const W = 900;
+      shape.moveTo(-W / 2, -5);
+      for (let i = 0; i <= bumps; i++) shape.lineTo(-W / 2 + (i / bumps) * W, height * (0.45 + rnd() * 0.55));
+      shape.lineTo(W / 2, -5);
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshBasicMaterial({ color }));
+      m.position.z = z;
       this.scene.add(m);
+    };
+    ridge(-380, 0x8fb2d6, 70, 18, 3);
+    ridge(-300, 0x7aa1c4, 46, 26, 7);
+    const hills = (z: number, color: number, amp: number, freq: number) => {
+      const shape = new THREE.Shape();
+      const W = 700;
+      shape.moveTo(-W / 2, -5);
+      for (let i = 0; i <= 80; i++) {
+        const x = -W / 2 + (i / 80) * W;
+        shape.lineTo(x, amp * (0.6 + 0.4 * Math.sin(x * freq) + 0.25 * Math.sin(x * freq * 2.7 + 1)));
+      }
+      shape.lineTo(W / 2, -5);
+      const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), new THREE.MeshLambertMaterial({ color }));
+      m.position.z = z;
+      this.scene.add(m);
+    };
+    hills(-200, 0x6fa95a, 16, 0.02);
+    hills(-130, 0x5c9a46, 9, 0.035);
+
+    const trunk = new THREE.MeshLambertMaterial({ color: 0x6b4a2b });
+    const leaf = [0x2f7d32, 0x3f8f3a, 0x276b2b].map((c) => new THREE.MeshLambertMaterial({ color: c, flatShading: true }));
+    this.geos.trunk = new THREE.CylinderGeometry(0.25, 0.35, 2, 6);
+    this.geos.crown = new THREE.ConeGeometry(2, 6, 7);
+    this.geos.bush = new THREE.IcosahedronGeometry(2.4, 0);
+    for (let i = 0; i < 70; i++) {
+      const tree = new THREE.Group();
+      const t = new THREE.Mesh(this.geos.trunk, trunk);
+      t.position.y = 1;
+      const round = Math.random() < 0.4;
+      const c = new THREE.Mesh(round ? this.geos.bush : this.geos.crown, leaf[i % 3]);
+      c.position.y = round ? 3.6 : 4.5;
+      tree.add(t, c);
+      tree.scale.setScalar(0.8 + Math.random() * 0.9);
+      tree.position.set((Math.random() - 0.5) * 260, 0, -70 - Math.random() * 40);
+      this.scene.add(tree);
     }
 
-    // neon grid floor
-    this.gridMat = new THREE.ShaderMaterial({
-      vertexShader: GRID_VS,
-      fragmentShader: GRID_FS,
-      uniforms: { uTime: { value: 0 }, uColor: { value: new THREE.Color(0xff2fd0) }, uPulse: { value: 0 } },
-    });
-    this.grid = new THREE.Mesh(new THREE.PlaneGeometry(400, 260), this.gridMat);
-    this.grid.rotation.x = -Math.PI / 2;
-    this.grid.position.z = -120;
-    this.scene.add(this.grid);
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(900, 500), new THREE.MeshLambertMaterial({ map: grassTexture() }));
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.z = -200;
+    this.scene.add(ground);
 
-    this.scene.add(new THREE.HemisphereLight(0x9ad7ff, 0x40104a, 1.6));
-    const key = new THREE.DirectionalLight(0xffffff, 2);
-    key.position.set(2, 6, 4);
-    this.scene.add(key);
-    const back = new THREE.DirectionalLight(0xff4fa0, 2.2);
-    back.position.set(0, 3, -20);
-    this.scene.add(back);
-    this.boomLight = new THREE.PointLight(0xffaa55, 0, 40, 1.4);
-    this.scene.add(this.boomLight);
+    this.scene.add(new THREE.HemisphereLight(0xdff0ff, 0x5c8a3a, 2.2));
+    const sunLight = new THREE.DirectionalLight(0xfff1d6, 2.4);
+    sunLight.position.set(30, 60, 20);
+    this.scene.add(sunLight);
 
-    // geometries
-    this.geos.drone = new THREE.OctahedronGeometry(0.55, 0);
-    this.geos.droneRing = new THREE.TorusGeometry(0.85, 0.07, 6, 28);
-    this.geos.zig = new THREE.ConeGeometry(0.5, 1.4, 4);
-    this.geos.zig.rotateX(Math.PI / 2);
-    this.geos.zigWing = new THREE.BoxGeometry(1.6, 0.06, 0.4);
-    this.geos.tank = new THREE.DodecahedronGeometry(1.05, 0);
-    this.geos.tankSpike = new THREE.ConeGeometry(0.22, 0.8, 5);
-    this.geos.missile = new THREE.ConeGeometry(0.26, 1.3, 8);
-    this.geos.missile.rotateX(Math.PI / 2);
-    this.geos.bossBody = new THREE.LatheGeometry(
-      [[0, -0.6], [2.2, -0.4], [3.6, 0], [2.4, 0.35], [1.2, 0.5], [0, 0.55]].map(([x, y]) => new THREE.Vector2(x, y)),
-      32
-    );
-    this.geos.bossDome = new THREE.SphereGeometry(1.25, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2);
-    this.geos.bossRing = new THREE.TorusGeometry(3.7, 0.08, 6, 64);
-    this.geos.pickup = new THREE.BoxGeometry(0.9, 0.9, 0.9);
-    this.geos.pickupEdges = new THREE.EdgesGeometry(this.geos.pickup);
-    this.geos.hp = new THREE.PlaneGeometry(1, 0.14);
-    for (const k of Object.keys(COL) as EnemyKind[]) {
-      const c = new THREE.Color(COL[k]);
-      this.halo[k] = new THREE.SpriteMaterial({
-        map: glowTexture(`${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)}`),
-        transparent: true,
-        opacity: 0.55,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      });
-    }
+    // bird parts (shared by every bird)
+    this.geos.body = new THREE.SphereGeometry(0.5, 14, 10);
+    this.geos.body.scale(1.6, 0.85, 0.85);
+    this.geos.head = new THREE.SphereGeometry(0.34, 12, 10);
+    this.geos.beak = new THREE.ConeGeometry(0.1, 0.36, 6);
+    this.geos.beak.rotateZ(-Math.PI / 2);
+    this.geos.tail = new THREE.ConeGeometry(0.28, 0.7, 4);
+    this.geos.tail.rotateZ(Math.PI / 2);
+    this.geos.tail.scale(1, 1, 0.3);
+    this.geos.eye = new THREE.SphereGeometry(0.06, 6, 6);
+    this.geos.neck = new THREE.CylinderGeometry(0.14, 0.2, 0.7, 8);
+    this.geos.wingNear = wingGeometry(1);
+    this.geos.wingFar = wingGeometry(-1);
+    this.geos.balloon = new THREE.SphereGeometry(0.75, 20, 16);
+    this.geos.balloon.scale(1, 1.2, 1);
+    this.geos.knot = new THREE.ConeGeometry(0.12, 0.2, 8);
+    this.geos.crate = new THREE.BoxGeometry(0.45, 0.45, 0.45);
+    this.geos.hp = new THREE.PlaneGeometry(1, 0.1);
+    this.geos.tracer = new THREE.CylinderGeometry(1, 1, 1, 6, 1, true);
 
     this.scene.add(this.sparks.group);
     for (let i = 0; i < 2; i++) this.guns.push(this.makeGun(i === 0 ? 1 : -1));
@@ -247,22 +275,23 @@ export class ShooterScene {
   private makeGun(side: 1 | -1): Gun {
     const root = new THREE.Group();
     const barrel = new THREE.Group();
-    const body = new THREE.MeshStandardMaterial({ color: 0x1b1530, metalness: 0.7, roughness: 0.3 });
-    const neon = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: side === 1 ? 0x22d3ee : 0xf472b6, emissiveIntensity: 2.2 });
-    const b1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.17, 0.7), body);
-    const b2 = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.55, 12), body);
-    b2.rotation.x = Math.PI / 2;
-    b2.position.set(0, 0.03, -0.55);
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.03, 0.6), neon);
-    stripe.position.y = 0.07;
-    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.32, 0.14), body);
-    grip.position.set(0, -0.2, 0.2);
+    const metal = new THREE.MeshStandardMaterial({ color: 0x2b2f36, metalness: 0.8, roughness: 0.35 });
+    const wood = new THREE.MeshStandardMaterial({ color: 0x8a5530, roughness: 0.7 });
+    const accent = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: side === 1 ? 0xffb020 : 0x38bdf8, emissiveIntensity: 1.2 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.18, 0.6), metal);
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.7, 12), metal);
+    tube.rotation.x = Math.PI / 2;
+    tube.position.set(0, 0.03, -0.6);
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.34, 0.16), wood);
+    grip.position.set(0, -0.22, 0.18);
     grip.rotation.x = -0.35;
-    const tip = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.018, 6, 16), neon);
-    tip.position.set(0, 0.03, -0.82);
-    barrel.add(b1, b2, stripe, grip, tip);
+    const sight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.06), accent);
+    sight.position.set(0, 0.12, -0.2);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.016, 6, 16), accent);
+    ring.position.set(0, 0.03, -0.95);
+    barrel.add(body, tube, grip, sight, ring);
     const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.flashTex, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    flash.position.set(0, 0.03, -0.95);
+    flash.position.set(0, 0.03, -1.05);
     flash.scale.setScalar(0.5);
     barrel.add(flash);
     root.add(barrel);
@@ -277,197 +306,235 @@ export class ShooterScene {
     if (w < 2 || h < 2) return;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    const aspect = w / h;
-    // keep the guns in the lower corners whatever the aspect
     const halfH = Math.tan((FOV * Math.PI) / 360) * 1.6;
-    for (const g of this.guns) g.root.position.set(g.side * Math.min(halfH * aspect * 0.58, 1.05), -halfH * 0.74, -1.6);
+    for (const g of this.guns) g.root.position.set(g.side * Math.min(halfH * this.camera.aspect * 0.58, 1.05), -halfH * 0.74, -1.6);
   }
 
-  private enemyVis(e: Enemy) {
+  private birdVis(e: Bird): Vis {
     const g = new THREE.Group();
     const mats: THREE.MeshStandardMaterial[] = [];
-    const mat = (color: number, emissive = 0.6, extra: THREE.MeshStandardMaterialParameters = {}) => {
-      const m = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: emissive, roughness: 0.35, metalness: 0.4, flatShading: true, ...extra });
-      m.userData.base = emissive;
+    const mat = (color: number, extra: THREE.MeshStandardMaterialParameters = {}) => {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: 0.75, flatShading: true, ...extra });
+      m.userData.emissive = m.emissive.getHex();
+      m.userData.base = m.emissiveIntensity;
       mats.push(m);
       return m;
     };
-    const c = COL[e.kind];
-    let hp: THREE.Mesh | undefined;
-    switch (e.kind) {
-      case 'drone': {
-        g.add(new THREE.Mesh(this.geos.drone, mat(c, 0.7)));
-        const ring = new THREE.Mesh(this.geos.droneRing, mat(0xffffff, 1.2));
-        ring.name = 'spin';
-        g.add(ring);
-        break;
-      }
-      case 'zig': {
-        g.add(new THREE.Mesh(this.geos.zig, mat(c, 0.8)));
-        g.add(new THREE.Mesh(this.geos.zigWing, mat(0x2a0a2a, 0.2)));
-        break;
-      }
-      case 'tank': {
-        const core = new THREE.Mesh(this.geos.tank, mat(c, 0.45, { metalness: 0.7 }));
-        core.name = 'spin';
-        for (let i = 0; i < 6; i++) {
-          const s = new THREE.Mesh(this.geos.tankSpike, mat(0xffe1c2, 0.8));
-          const dir = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]][i];
-          s.position.set(dir[0] * 1.05, dir[1] * 1.05, dir[2] * 1.05);
-          s.lookAt(dir[0] * 3, dir[1] * 3, dir[2] * 3);
-          s.rotateX(Math.PI / 2);
-          core.add(s);
-        }
-        g.add(core);
-        break;
-      }
-      case 'missile': {
-        g.add(new THREE.Mesh(this.geos.missile, mat(c, 1.2)));
-        break;
-      }
-      case 'boss': {
-        const body = new THREE.Mesh(this.geos.bossBody, mat(0x3b1d6e, 0.35, { metalness: 0.8, roughness: 0.25 }));
-        const dome = new THREE.Mesh(this.geos.bossDome, mat(0xc084fc, 0.9, { transparent: true, opacity: 0.85 }));
-        dome.position.y = 0.45;
-        const ring = new THREE.Mesh(this.geos.bossRing, mat(0xff3fd0, 1.6));
-        ring.rotation.x = Math.PI / 2;
-        ring.name = 'spin';
-        g.add(body, dome, ring);
-        for (let i = 0; i < 10; i++) {
-          const l = new THREE.Mesh(this.geos.drone, mat(0xfff27a, 2));
-          const a = (i / 10) * Math.PI * 2;
-          l.scale.setScalar(0.28);
-          l.position.set(Math.cos(a) * 3, 0.05, Math.sin(a) * 3);
-          body.add(l);
-        }
-        break;
-      }
-      case 'pickup': {
-        const pc = PICKUP_COL[e.pickup ?? 'shield'];
-        const box = new THREE.Mesh(this.geos.pickup, mat(pc, 0.9, { transparent: true, opacity: 0.35 }));
-        box.name = 'spin';
-        box.add(new THREE.LineSegments(this.geos.pickupEdges, new THREE.LineBasicMaterial({ color: pc })));
-        g.add(box);
-        break;
-      }
+    const wings: THREE.Object3D[] = [];
+    if (e.kind === 'balloon') {
+      const color = BALLOON[e.pickup ?? 'life'];
+      const b = new THREE.Mesh(this.geos.balloon, mat(color, { roughness: 0.25, flatShading: false, emissive: color, emissiveIntensity: 0.25 }));
+      b.position.y = 0.4;
+      const k = new THREE.Mesh(this.geos.knot, mat(color));
+      k.position.y = -0.55;
+      k.rotation.x = Math.PI;
+      const crate = new THREE.Mesh(this.geos.crate, mat(0xb98a4e));
+      crate.position.y = -1.6;
+      const string = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -0.6, 0), new THREE.Vector3(0, -1.38, 0)]),
+        new THREE.LineBasicMaterial({ color: 0x444444 })
+      );
+      g.add(b, k, crate, string);
+      return { g, wings, mats };
     }
-    const halo = new THREE.Sprite(e.kind === 'pickup' ? this.halo.pickup : this.halo[e.kind]);
-    halo.scale.setScalar(e.r * (e.kind === 'boss' ? 3.5 : 4));
-    g.add(halo);
-    if (e.kind === 'tank' || e.kind === 'boss') {
-      hp = new THREE.Mesh(this.geos.hp, new THREE.MeshBasicMaterial({ color: 0x4ade80, depthTest: false, transparent: true, fog: false }));
-      hp.position.y = e.r + 0.5;
-      hp.scale.x = e.kind === 'boss' ? 6 : 2;
+    const L = LOOK[e.kind];
+    const glow = e.kind === 'golden' ? { emissive: 0xffb000, emissiveIntensity: 0.45, metalness: 0.5, roughness: 0.3 } : {};
+    const body = new THREE.Mesh(this.geos.body, mat(L.body, glow));
+    const belly = new THREE.Mesh(this.geos.body, mat(L.belly, glow));
+    belly.scale.set(0.85, 0.7, 0.92);
+    belly.position.set(0.05, -0.12, 0);
+    const headMat = mat(L.head, glow);
+    const head = new THREE.Mesh(this.geos.head, headMat);
+    const beak = new THREE.Mesh(this.geos.beak, mat(L.beak));
+    const eyeMat = mat(0x111111, { roughness: 0.2 });
+    const eye1 = new THREE.Mesh(this.geos.eye, eyeMat);
+    const eye2 = new THREE.Mesh(this.geos.eye, eyeMat);
+    if (e.kind === 'goose') {
+      const neck = new THREE.Mesh(this.geos.neck, headMat);
+      neck.position.set(0.85, 0.35, 0);
+      neck.rotation.z = -0.9;
+      head.position.set(1.15, 0.6, 0);
+      g.add(neck);
+    } else head.position.set(0.82, 0.2, 0);
+    beak.position.set(head.position.x + 0.42, head.position.y - 0.03, 0);
+    eye1.position.set(head.position.x + 0.16, head.position.y + 0.1, 0.27);
+    eye2.position.set(head.position.x + 0.16, head.position.y + 0.1, -0.27);
+    const tail = new THREE.Mesh(this.geos.tail, mat(L.wing, glow));
+    tail.position.set(-0.95, 0.05, 0);
+    if (e.kind === 'swift') tail.scale.set(1.4, 1, 1.6);
+    const wingMat = mat(L.wing, { side: THREE.DoubleSide, ...glow });
+    const near = new THREE.Mesh(this.geos.wingNear, wingMat);
+    const far = new THREE.Mesh(this.geos.wingFar, wingMat);
+    near.position.set(0.1, 0.25, 0.3);
+    far.position.set(0.1, 0.25, -0.3);
+    if (e.kind === 'swift') {
+      near.scale.set(0.9, 1, 1.35);
+      far.scale.set(0.9, 1, 1.35);
+    }
+    wings.push(near, far);
+    const model = new THREE.Group();
+    model.add(body, belly, head, beak, eye1, eye2, tail, near, far);
+    model.scale.setScalar(L.size * 1.5);
+    // the model's beak points down +x: turn it round for birds flying right→left
+    model.rotation.y = e.dir < 0 ? Math.PI : 0;
+    model.name = 'model';
+    g.add(model);
+    let hp: THREE.Mesh | undefined;
+    if (e.kind === 'goose') {
+      hp = new THREE.Mesh(this.geos.hp, new THREE.MeshBasicMaterial({ color: 0x4ade80, depthTest: false, transparent: true }));
+      hp.position.y = 1.9;
       hp.renderOrder = 5;
       g.add(hp);
     }
-    return { g, mats, hp };
+    return { g, wings, mats, hp };
   }
 
-  /** Bright tracer from the gun muzzle to the target point. */
-  tracer(hand: number, x: number, y: number, z: number, color: number) {
+  tracer(hand: number, x: number, y: number, z: number) {
     const gun = this.guns[hand] ?? this.guns[0];
-    const from = new THREE.Vector3(0, 0.03, -0.95);
+    const from = new THREE.Vector3(0, 0.03, -1.05);
     gun.barrel.localToWorld(from);
     const to = new THREE.Vector3(x, y, z);
-    const len = from.distanceTo(to);
     let t = this.tracers.find((tr) => tr.life <= 0);
     if (!t) {
-      const m = new THREE.Mesh(this.tracerGeo, new THREE.MeshBasicMaterial({ color, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      const m = new THREE.Mesh(this.geos.tracer, new THREE.MeshBasicMaterial({ color: 0xfff3b0, transparent: true, depthWrite: false, fog: false }));
       t = { mesh: m, life: 0 };
       this.tracers.push(t);
       this.scene.add(m);
     }
-    const mat = t.mesh.material as THREE.MeshBasicMaterial;
-    mat.color.set(color);
     t.mesh.position.copy(from).lerp(to, 0.5);
-    t.mesh.scale.set(0.035, len, 0.035);
+    t.mesh.scale.set(0.03, from.distanceTo(to), 0.03);
     t.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize());
     t.mesh.visible = true;
-    t.life = 0.09;
+    t.life = 0.08;
     gun.recoil = 1;
     (gun.flash.material as THREE.SpriteMaterial).opacity = 1;
     gun.flash.material.rotation = Math.random() * Math.PI;
   }
 
-  hitSpark(x: number, y: number, z: number, kind: EnemyKind) {
-    this.sparks.burst(x, y, z, SPARK[kind], 10, 6, 0.25, 0.35, true);
+  /** A puff of feathers (or balloon confetti) at a world point. */
+  puff(x: number, y: number, z: number, kind: BirdKind, count = 14) {
+    const colors = FEATHER[kind];
+    for (let i = 0; i < count; i++) {
+      let f = this.feathers.find((p) => p.life <= 0);
+      if (!f) {
+        if (this.feathers.length > 260) return;
+        const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.featherTex, transparent: true, depthWrite: false }));
+        f = { s, vx: 0, vy: 0, vz: 0, spin: 0, life: 0 };
+        this.feathers.push(f);
+        this.scene.add(s);
+      }
+      const m = f.s.material as THREE.SpriteMaterial;
+      m.color.setHex(colors[i % colors.length]);
+      m.opacity = 1;
+      const a = Math.random() * Math.PI * 2;
+      const v = 2 + Math.random() * 4;
+      f.vx = Math.cos(a) * v;
+      f.vy = Math.sin(a) * v + 1.5;
+      f.vz = (Math.random() - 0.5) * v;
+      f.spin = (Math.random() - 0.5) * 8;
+      f.life = 1.4 + Math.random() * 0.8;
+      f.s.position.set(x, y, z);
+      const sz = kind === 'balloon' ? 0.22 : 0.35 + Math.random() * 0.25;
+      f.s.scale.set(sz * 0.5, sz, 1);
+      f.s.visible = true;
+    }
   }
 
-  explode(x: number, y: number, z: number, kind: EnemyKind) {
-    const big = kind === 'boss' ? 4 : kind === 'tank' ? 1.8 : 1;
-    this.sparks.burst(x, y, z, SPARK[kind], Math.round(34 * big), 9 * big, 0.45 * big, 0.8, true);
-    this.sparks.burst(x, y, z, '255,240,200', Math.round(12 * big), 4 * big, 1.1 * big, 0.35, true);
-    this.boomLight.position.set(x, y, z + 2);
-    this.boomLight.intensity = 60 * big;
-    const m = new THREE.Mesh(this.ringGeo, new THREE.MeshBasicMaterial({ color: new THREE.Color(COL[kind]), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-    m.position.set(x, y, z);
-    this.scene.add(m);
-    this.rings.push({ m, t: 0, max: 0.5, size: 3.5 * big });
-    if (kind === 'boss') this.pulse = 2;
-  }
-
-  gridPulse(v = 1) {
-    this.pulse = Math.max(this.pulse, v);
+  pop(x: number, y: number, z: number) {
+    this.sparks.burst(x, y, z, '255,255,255', 16, 6, 0.4, 0.35, true);
+    this.puff(x, y, z, 'balloon', 18);
   }
 
   update(w: World, dt: number, aims: { x: number; y: number; active: boolean }[]) {
     const aspect = this.camera.aspect;
-    this.gridMat.uniforms.uTime.value += dt;
-    this.pulse = Math.max(0, this.pulse - dt * 2);
-    this.gridMat.uniforms.uPulse.value = this.pulse;
-    this.boomLight.intensity *= Math.exp(-dt * 9);
+    for (const c of this.clouds) {
+      c.s.position.x += c.v * dt;
+      if (c.s.position.x > 300) c.s.position.x = -300;
+    }
+    const now = performance.now() / 1000;
 
-    // enemies
     const ids = new Set<number>();
-    for (const e of w.enemies) {
+    for (const e of w.birds) {
       ids.add(e.id);
-      let v = this.enemies.get(e.id);
+      let v = this.birds.get(e.id);
       if (!v) {
-        v = this.enemyVis(e);
-        this.enemies.set(e.id, v);
+        v = this.birdVis(e);
+        this.birds.set(e.id, v);
         this.scene.add(v.g);
       }
       v.g.position.set(e.x, e.y, e.z);
-      const spin = v.g.getObjectByName('spin');
-      if (spin) {
-        spin.rotation.y += dt * (e.kind === 'boss' ? 0.8 : 2.5);
-        if (e.kind !== 'boss') spin.rotation.x += dt * 1.3;
+      if (e.kind === 'balloon') v.g.rotation.z = Math.sin(e.t * 1.3 + e.seed) * 0.12;
+      else {
+        const rate = e.kind === 'swift' ? 9 : e.kind === 'goose' ? 4.5 : e.kind === 'golden' ? 10 : 7;
+        const flap = Math.sin(now * rate * (w.slowT > 0 ? 0.5 : 1) + e.seed) * (e.kind === 'goose' ? 0.7 : 0.9);
+        v.wings[0].rotation.x = -flap;
+        v.wings[1].rotation.x = flap;
+        // pitch the nose with the bob (in the bird's own frame, so it works for both directions)
+        const climb = Math.cos(e.t * e.freq * Math.PI + e.seed) * e.amp * e.freq * 0.25;
+        v.g.getObjectByName('model')!.rotation.z = climb * 0.6;
       }
-      if (e.kind === 'zig' || e.kind === 'missile') v.g.rotation.z = Math.sin(e.t * 4.5 + e.seed) * 0.6;
-      if (e.kind === 'drone') v.g.children[0].rotation.y += dt * 3;
-      if (e.kind === 'boss') v.g.rotation.z = Math.cos(e.t * 0.55 + e.seed) * 0.15;
       const flash = e.hitFlash > 0;
-      for (const m of v.mats) m.emissiveIntensity = flash ? 4 : m.userData.base;
+      for (const m of v.mats) {
+        m.emissive.setHex(flash ? 0xffffff : m.userData.emissive);
+        m.emissiveIntensity = flash ? 1.2 : m.userData.base;
+      }
       if (v.hp) {
         const f = Math.max(0, e.hp / e.maxHp);
-        v.hp.scale.x = (e.kind === 'boss' ? 6 : 2) * f;
-        (v.hp.material as THREE.MeshBasicMaterial).color.setHSL(0.33 * f, 0.9, 0.55);
-        v.hp.lookAt(this.camera.position);
+        v.hp.scale.x = 1.6 * f;
+        (v.hp.material as THREE.MeshBasicMaterial).color.setHSL(0.33 * f, 0.9, 0.5);
       }
-      if (e.kind === 'missile' && Math.random() < 0.6) this.sparks.burst(e.x, e.y, e.z - 0.7, '255,140,60', 1, 1, 0.3, 0.3, true);
     }
-    for (const [id, v] of this.enemies) {
-      if (!ids.has(id)) {
-        this.scene.remove(v.g);
-        for (const m of v.mats) m.dispose();
-        v.g.traverse((o) => {
-          const lm = (o as THREE.LineSegments).material as THREE.Material | undefined;
-          if (o instanceof THREE.LineSegments && lm) lm.dispose();
-        });
-        if (v.hp) (v.hp.material as THREE.Material).dispose();
-        this.enemies.delete(id);
+    for (const [id, v] of this.birds) {
+      if (ids.has(id)) continue;
+      this.birds.delete(id);
+      // a shot bird keeps its model and tumbles down as a faller
+      if (w.fallers.some((f) => f.id === id)) {
+        if (v.hp) v.hp.visible = false;
+        this.fallers.set(id, v);
+      } else this.freeVis(v);
+    }
+
+    const falling = new Set<number>();
+    for (const f of w.fallers) {
+      falling.add(f.id);
+      const v = this.fallers.get(f.id);
+      if (!v) continue;
+      v.g.position.set(f.x, f.y, f.z);
+      v.g.rotation.z = f.rot * (f.dir || 1);
+      v.wings[0].rotation.x = 1.2;
+      v.wings[1].rotation.x = -1.2;
+    }
+    for (const [id, v] of this.fallers) {
+      if (!falling.has(id)) {
+        this.freeVis(v);
+        this.fallers.delete(id);
       }
     }
 
+    // feathers flutter down
+    for (const f of this.feathers) {
+      if (f.life <= 0) continue;
+      f.life -= dt;
+      const k = Math.exp(-dt * 2.5);
+      f.vx *= k;
+      f.vz *= k;
+      f.vy = f.vy * k - 3 * dt;
+      f.s.position.x += (f.vx + Math.sin(f.life * 6) * 0.8) * dt;
+      f.s.position.y += f.vy * dt;
+      f.s.position.z += f.vz * dt;
+      const m = f.s.material as THREE.SpriteMaterial;
+      m.rotation += f.spin * dt;
+      m.opacity = Math.min(1, f.life);
+      if (f.life <= 0) f.s.visible = false;
+    }
+
     // guns follow the aim
+    const tan = Math.tan((FOV * Math.PI) / 360);
     for (let i = 0; i < 2; i++) {
       const gun = this.guns[i];
       const a = aims[i];
       gun.root.visible = !!a?.active && w.phase === 'play';
       if (!gun.root.visible) continue;
-      // point the barrel at a far point along the aim ray (camera-local, the camera is unrotated)
-      const tan = Math.tan((FOV * Math.PI) / 360);
       const target = new THREE.Vector3((2 * a.x - 1) * tan * aspect * 30, (1 - 2 * a.y) * tan * 30, -30);
       gun.barrel.lookAt(this.camera.localToWorld(target));
       gun.barrel.rotateY(Math.PI); // the model's muzzle points down -z
@@ -479,49 +546,43 @@ export class ShooterScene {
       gun.flash.scale.setScalar(0.35 + fm.opacity * 0.35);
       const reload = w.reloadT > 0 ? Math.sin((w.reloadT / 0.9) * Math.PI) : 0;
       gun.root.rotation.z = gun.side * reload * 0.9;
-      gun.root.position.y = -Math.tan((FOV * Math.PI) / 360) * 1.6 * 0.74 - reload * 0.25;
+      gun.root.position.y = -tan * 1.6 * 0.74 - reload * 0.25;
     }
 
     for (const t of this.tracers) {
       if (t.life <= 0) continue;
       t.life -= dt;
       const m = t.mesh.material as THREE.MeshBasicMaterial;
-      m.opacity = Math.max(0, t.life / 0.09);
-      t.mesh.scale.x = t.mesh.scale.z = 0.035 * m.opacity + 0.005;
+      m.opacity = Math.max(0, t.life / 0.08);
+      t.mesh.scale.x = t.mesh.scale.z = 0.03 * m.opacity + 0.004;
       if (t.life <= 0) t.mesh.visible = false;
-    }
-
-    for (let i = this.rings.length - 1; i >= 0; i--) {
-      const r = this.rings[i];
-      r.t += dt;
-      const u = r.t / r.max;
-      if (u >= 1) {
-        this.scene.remove(r.m);
-        (r.m.material as THREE.Material).dispose();
-        this.rings.splice(i, 1);
-        continue;
-      }
-      r.m.scale.setScalar(0.3 + u * r.size);
-      r.m.lookAt(this.camera.position);
-      (r.m.material as THREE.MeshBasicMaterial).opacity = 1 - u;
     }
 
     this.sparks.update(dt);
     this.gl.render(this.scene, this.camera);
   }
 
+  private freeVis(v: Vis) {
+    this.scene.remove(v.g);
+    for (const m of v.mats) m.dispose();
+    v.g.traverse((o) => {
+      if (o instanceof THREE.Line) {
+        o.geometry.dispose();
+        (o.material as THREE.Material).dispose();
+      }
+    });
+    if (v.hp) (v.hp.material as THREE.Material).dispose();
+  }
+
   dispose() {
-    for (const v of this.enemies.values()) for (const m of v.mats) m.dispose();
-    this.enemies.clear();
+    for (const v of this.birds.values()) this.freeVis(v);
+    for (const v of this.fallers.values()) this.freeVis(v);
+    this.birds.clear();
+    this.fallers.clear();
     this.sparks.dispose();
     disposeTree(this.scene);
     for (const g of Object.values(this.geos)) g.dispose();
-    this.tracerGeo.dispose();
-    this.ringGeo.dispose();
     this.flashTex.dispose();
-    for (const m of Object.values(this.halo)) {
-      m.map?.dispose();
-      m.dispose();
-    }
+    this.featherTex.dispose();
   }
 }

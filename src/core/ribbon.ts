@@ -147,7 +147,7 @@ export class Sparks {
   private live: Spark[] = [];
   private tex = new Map<string, THREE.Texture>();
 
-  constructor(private maxCount = 600) {}
+  constructor(private maxCount = 600, private additive = true) {}
 
   private texFor(color: string) {
     let t = this.tex.get(color);
@@ -158,6 +158,9 @@ export class Sparks {
     return t;
   }
 
+  /** Falling particles (feathers, debris) when `fall` > 0, in world units / s². */
+  fall = 0;
+
   burst(x: number, y: number, z: number, color: string, count: number, speed: number, size: number, life = 0.6, gravity3d = false) {
     for (let i = 0; i < count; i++) {
       if (this.live.length >= this.maxCount) {
@@ -167,7 +170,7 @@ export class Sparks {
       }
       let sp = this.pool.pop();
       if (!sp) {
-        const mat = new THREE.SpriteMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+        const mat = new THREE.SpriteMaterial({ transparent: true, blending: this.additive ? THREE.AdditiveBlending : THREE.NormalBlending, depthWrite: false });
         sp = { s: new THREE.Sprite(mat), vx: 0, vy: 0, vz: 0, life: 0, max: 1, size: 1, drag: 1 };
         this.group.add(sp.s);
       }
@@ -208,6 +211,7 @@ export class Sparks {
       sp.vx *= k;
       sp.vy *= k;
       sp.vz *= k;
+      sp.vy -= this.fall * dt;
       sp.s.position.x += sp.vx * dt;
       sp.s.position.y += sp.vy * dt;
       sp.s.position.z += sp.vz * dt;

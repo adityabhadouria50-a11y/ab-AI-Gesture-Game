@@ -1,25 +1,26 @@
 /**
- * Neon Strike: make a finger gun, aim with your index finger, drop your thumb to fire. Fist to reload.
- * Both hands can shoot. Mouse: aim, click (or hold) to fire, right-click or R to reload.
+ * Sky Hunter: birds glide across the sky left→right and right→left. Make a finger gun, aim with your index finger,
+ * drop your thumb to fire, make a fist to reload. Both hands can shoot.
+ * Mouse: aim, click (or hold) to fire, right-click or R to reload.
  */
 import type { Game, GameEnv, GameMeta } from '../../core/types';
 import type { HandView, BotHandState } from '../../core/input';
 import type { HandPose } from '../../hand-gesture-kit';
-import { createWorld, startGame, step, fire, reload, pick, project, accuracy, MAG, MAX_SHIELD, RAPID_S, type World, type Enemy } from './rules';
+import { createWorld, startGame, step, fire, reload, pick, project, accuracy, MAG, MAX_LIVES, RAPID_S, type World, type Bird } from './rules';
 import { ShooterScene } from './scene';
 
 export const META: GameMeta = {
   id: 'shooter',
-  name: 'Neon Strike',
-  tagline: 'Finger-gun blaster. Hold the line against waves of neon drones.',
-  accent: '#f472b6',
+  name: 'Sky Hunter',
+  tagline: 'Birds glide across the sky. Finger-gun them before they fly away.',
+  accent: '#f59e0b',
   surface: 'gl',
   howTo: [
     { icon: '👉', title: 'Aim', desc: 'Make a finger gun, point your index finger' },
     { icon: '👍', title: 'Fire', desc: 'Drop your thumb down like a trigger' },
     { icon: '✊', title: 'Reload', desc: 'Make a fist (or it auto-reloads)' },
   ],
-  tip: '🛡️ Anything that reaches you drains your shield. Shoot the glowing cubes: green = shield, yellow = rapid fire, white = nuke. Boss every 5th wave.',
+  tip: '🐦 Every bird that reaches the other side costs a heart (you have 5). Geese take 2 hits, golden birds are fast and worth 500. Shoot balloons: red = +1 heart, yellow = rapid fire, blue = slow motion.',
 };
 
 /** Thumb-drop trigger with hysteresis: fires once per drop, re-arms when the thumb comes back up. */
@@ -27,7 +28,7 @@ class Trigger {
   armed = false;
   down = false;
   update(h: HandView): boolean {
-    // the thumb is "up" when it sticks out and isn't curled across the palm
+    // the thumb is "down" when it's tucked in or curled across the palm
     const v = Math.max(1 - h.thumbOut, h.curl[0]);
     if (!this.down && v > 0.55) {
       this.down = true;
@@ -64,11 +65,8 @@ export function createShooter(env: GameEnv): Game {
   env.hud.innerHTML = `
     <div class="hud-bar">
       <div class="hud-block"><span class="hud-label">Score</span><span class="hud-val" data-k="score">0</span><span class="mult" data-k="mult" hidden>x1</span></div>
-      <div class="hud-block center"><span class="hud-label">Wave</span><span class="hud-val small" data-k="wave">1</span></div>
-      <div class="hud-block right">
-        <span class="hud-label">Shield</span>
-        <div class="shield"><div data-k="shield"></div></div>
-      </div>
+      <div class="hud-block center"><span class="hud-label">Wave</span><span class="hud-val small" data-k="wave">1</span><div class="powers" data-k="powers"></div></div>
+      <div class="hud-block right"><span class="hud-label">Hearts</span><div class="lives hearts" data-k="lives">${'<i></i>'.repeat(MAX_LIVES)}</div></div>
     </div>
     <div class="ammo" data-k="ammo"></div>
     <div class="crosshair" data-k="ch0"><i></i><b></b><svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="17"/></svg></div>
@@ -76,7 +74,7 @@ export function createShooter(env: GameEnv): Game {
     <div class="damage-vignette" data-k="dmg"></div>
     <label class="hud-toggle"><input type="checkbox" data-k="auto"> Auto-fire on target</label>`;
   const $ = (k: string) => env.hud.querySelector<HTMLElement>(`[data-k="${k}"]`)!;
-  const elScore = $('score'), elMult = $('mult'), elWave = $('wave'), elShield = $('shield'), elAmmo = $('ammo'), elDmg = $('dmg');
+  const elScore = $('score'), elMult = $('mult'), elWave = $('wave'), elLives = $('lives'), elAmmo = $('ammo'), elDmg = $('dmg'), elPowers = $('powers');
   const ch = [$('ch0'), $('ch1')];
   const autoBox = $('auto') as HTMLInputElement;
   autoBox.checked = autoFire;
@@ -88,10 +86,10 @@ export function createShooter(env: GameEnv): Game {
       /* ignore */
     }
   });
-  autoBox.addEventListener('pointerdown', (e) => e.stopPropagation());
+  autoBox.parentElement!.addEventListener('pointerdown', (e) => e.stopPropagation());
   elAmmo.innerHTML = '<i></i>'.repeat(MAG);
   const pips = [...elAmmo.querySelectorAll('i')];
-  let shownAmmo = -1, shownScore = -1, shownShield = -1;
+  let shownAmmo = -1, shownScore = -1, shownLives = -1, shownPowers = '';
   let dmgFlash = 0;
 
   const onKey = (e: KeyboardEvent) => {
@@ -100,10 +98,11 @@ export function createShooter(env: GameEnv): Game {
   addEventListener('keydown', onKey);
 
   const handle = () => {
+    const aspect = innerWidth / Math.max(1, innerHeight);
     for (const e of world.events) {
       switch (e.type) {
         case 'shot':
-          scene.tracer(e.hand, e.x, e.y, e.z, e.hand === 0 ? 0x7cf3ff : 0xff8ad8);
+          scene.tracer(e.hand, e.x, e.y, e.z);
           env.sound.gunshot(e.rapid);
           if (e.hit) {
             const el = ch[e.hand] ?? ch[0];
@@ -113,35 +112,32 @@ export function createShooter(env: GameEnv): Game {
           }
           break;
         case 'hit':
-          scene.hitSpark(e.x, e.y, e.z, e.kind);
+          scene.puff(e.x, e.y, e.z, e.kind, 6);
           env.sound.hit();
           break;
         case 'kill': {
-          scene.explode(e.x, e.y, e.z, e.kind);
-          env.sound.explosion(e.kind === 'boss' ? 2 : e.kind === 'tank' ? 1.1 : 0.6);
-          const p = project(e.x, e.y, e.z, innerWidth / innerHeight);
-          if (e.kind === 'pickup') {
+          const p = project(e.x, e.y, e.z, aspect);
+          if (e.kind === 'balloon') {
+            scene.pop(e.x, e.y, e.z);
             env.sound.powerup();
-            const label = e.pickup === 'shield' ? '+30 SHIELD' : e.pickup === 'rapid' ? 'RAPID FIRE' : 'NUKE!';
-            env.banner(label, e.pickup === 'shield' ? '#4ade80' : e.pickup === 'rapid' ? '#facc15' : '#ffffff');
-            if (e.pickup === 'nuke') {
-              env.shake(0.9);
-              scene.gridPulse(2.5);
-            }
+            const label = e.pickup === 'life' ? '+1 HEART' : e.pickup === 'rapid' ? 'RAPID FIRE' : 'SLOW MOTION';
+            env.banner(label, e.pickup === 'life' ? '#f87171' : e.pickup === 'rapid' ? '#facc15' : '#38bdf8');
           } else {
-            env.popup(p.sx, p.sy, `+${e.points}`, e.kind === 'boss' ? '#e9d5ff' : '#fdf2f8', e.kind === 'boss' ? 40 : 22);
-          }
-          if (e.kind === 'boss') {
-            env.banner('BOSS DESTROYED', '#c084fc', `+${e.points}`);
-            env.shake(1);
+            scene.puff(e.x, e.y, e.z, e.kind, e.kind === 'goose' ? 22 : 14);
+            env.sound.hit();
+            env.popup(p.sx, p.sy, `+${e.points}`, e.kind === 'golden' ? '#fde047' : '#ffffff', e.kind === 'golden' ? 34 : 24);
+            if (e.kind === 'golden') env.banner('GOLDEN BIRD!', '#fde047');
           }
           break;
         }
-        case 'impact':
-          env.sound.damage();
-          env.shake(0.7);
-          dmgFlash = 1;
+        case 'escape': {
+          env.sound.lifeLost();
+          env.shake(0.3);
+          dmgFlash = 0.7;
+          const p = project(e.x, e.y, e.z, aspect);
+          env.popup(e.dir > 0 ? 0.9 : 0.1, Math.min(0.85, Math.max(0.15, p.sy)), 'ESCAPED!', '#fca5a5', 22);
           break;
+        }
         case 'empty':
           env.sound.emptyClick();
           break;
@@ -149,19 +145,15 @@ export function createShooter(env: GameEnv): Game {
           env.sound.reload();
           break;
         case 'wave':
-          env.banner(e.boss ? `BOSS WAVE ${e.wave}` : `WAVE ${e.wave}`, e.boss ? '#c084fc' : '#f472b6', e.boss ? 'Destroy the mothership' : 'Incoming');
-          if (e.boss) env.sound.alarm();
-          else env.sound.waveStart();
-          scene.gridPulse(1.2);
+          env.banner(e.flock ? `FLOCK WAVE ${e.wave}` : `WAVE ${e.wave}`, e.flock ? '#fde047' : '#ffffff', e.flock ? 'Here they come!' : 'Birds incoming');
+          env.sound.waveStart();
           break;
         case 'waveClear':
           env.banner('WAVE CLEAR', '#4ade80', `+${e.bonus}`);
           env.sound.fanfare();
           break;
         case 'multiplier':
-          if (e.value > 1) env.popup(0.5, 0.2, `x${e.value} STREAK`, '#facc15', 26);
-          break;
-        case 'missile':
+          if (e.value > 1) env.popup(0.5, 0.22, `x${e.value} STREAK`, '#facc15', 26);
           break;
         case 'reloaded':
           break;
@@ -178,8 +170,8 @@ export function createShooter(env: GameEnv): Game {
     start() {
       startGame(world, Number(env.params.get('wave')) || 1);
       phase = 'play';
-      shownAmmo = shownScore = shownShield = -1;
-      env.sound.setTheme('synth');
+      shownAmmo = shownScore = shownLives = -1;
+      env.sound.setTheme('dojo');
     },
     frame(dt, hands: HandView[]) {
       const aspect = innerWidth / Math.max(1, innerHeight);
@@ -224,7 +216,7 @@ export function createShooter(env: GameEnv): Game {
         }
       }
 
-      if (dt > 0) step(world, dt);
+      if (dt > 0) step(world, dt, aspect);
       handle();
       if (phase === 'play' && world.phase === 'over') {
         phase = 'over';
@@ -240,23 +232,35 @@ export function createShooter(env: GameEnv): Game {
         elMult.hidden = world.multiplier < 2;
         elMult.textContent = `x${world.multiplier}`;
         elWave.textContent = String(world.wave);
-        if (world.shield !== shownShield) {
-          shownShield = world.shield;
-          const f = world.shield / MAX_SHIELD;
-          elShield.style.transform = `scaleX(${f})`;
-          elShield.style.background = f > 0.5 ? '#4ade80' : f > 0.25 ? '#facc15' : '#f87171';
+        if (world.lives !== shownLives) {
+          const lost = shownLives > world.lives;
+          shownLives = world.lives;
+          elLives.querySelectorAll('i').forEach((el, n) => el.classList.toggle('lost', n >= world.lives));
+          if (lost) {
+            elLives.classList.remove('hurt');
+            void elLives.offsetWidth;
+            elLives.classList.add('hurt');
+          }
         }
         const ammo = world.rapidT > 0 ? MAG : world.ammo;
-        if (ammo !== shownAmmo || world.rapidT > 0) {
+        if (ammo !== shownAmmo) {
           shownAmmo = ammo;
-          pips.forEach((p, k) => p.classList.toggle('spent', k >= ammo));
+          pips.forEach((p, n) => p.classList.toggle('spent', n >= ammo));
         }
         elAmmo.classList.toggle('rapid', world.rapidT > 0);
         elAmmo.classList.toggle('reloading', world.reloadT > 0);
         elAmmo.style.setProperty('--rapid', String(world.rapidT / RAPID_S));
+        const pw: string[] = [];
+        if (world.rapidT > 0) pw.push(`<span class="pw double">RAPID ${world.rapidT.toFixed(1)}</span>`);
+        if (world.slowT > 0) pw.push(`<span class="pw freeze">SLOW-MO ${world.slowT.toFixed(1)}</span>`);
+        const html = pw.join('');
+        if (html !== shownPowers) {
+          shownPowers = html;
+          elPowers.innerHTML = html;
+        }
       }
       dmgFlash = Math.max(0, dmgFlash - dt * 2.5);
-      elDmg.style.opacity = String(Math.max(dmgFlash, phase === 'play' && world.shield < 30 ? 0.35 + Math.sin(performance.now() / 180) * 0.15 : 0));
+      elDmg.style.opacity = String(Math.max(dmgFlash, phase === 'play' && world.lives === 1 ? 0.3 + Math.sin(performance.now() / 180) * 0.12 : 0));
 
       scene.update(world, dt, visAims);
     },
@@ -264,14 +268,13 @@ export function createShooter(env: GameEnv): Game {
       scene.resize();
     },
     result() {
-      const s = world.score;
-      const headline = world.wave >= 10 ? 'Neon Legend' : world.wave >= 7 ? 'Grid Guardian' : world.wave >= 5 ? 'Boss Breaker' : world.wave >= 3 ? 'Sharpshooter' : 'Rookie Pilot';
+      const headline = world.wave >= 12 ? 'Legendary Marksman' : world.wave >= 8 ? 'Eagle Eye' : world.wave >= 5 ? 'Sharpshooter' : world.wave >= 3 ? 'Steady Hand' : 'Fresh Recruit';
       return {
-        score: s,
+        score: world.score,
         headline,
         stats: [
           { label: 'Wave', value: String(world.wave) },
-          { label: 'Kills', value: String(world.kills) },
+          { label: 'Birds', value: String(world.kills) },
           { label: 'Accuracy', value: `${accuracy(world)}%` },
           { label: 'Best Streak', value: String(world.bestStreak) },
         ],
@@ -281,7 +284,7 @@ export function createShooter(env: GameEnv): Game {
       return bot.update(world, dt, innerWidth / Math.max(1, innerHeight), aims[0]);
     },
     stats() {
-      return { score: world.score, wave: world.wave, kills: world.kills, shots: world.shots, hits: world.hits, shield: world.shield, ammo: world.ammo, enemies: world.enemies.length };
+      return { score: world.score, wave: world.wave, kills: world.kills, escaped: world.escaped, shots: world.shots, hits: world.hits, lives: world.lives, ammo: world.ammo, birds: world.birds.length };
     },
     dispose() {
       removeEventListener('keydown', onKey);
@@ -296,10 +299,10 @@ const GUN: HandPose = { curl: [0, 0, 1, 1, 1], pinch: 0 };
 const BANG: HandPose = { curl: [1, 0, 1, 1, 1], pinch: 0 };
 const FIST: HandPose = { curl: [1, 1, 1, 1, 1], pinch: 0 };
 
-/** Synthetic gunner: tracks the most urgent enemy, drops its thumb to fire, makes a fist to reload. */
+/** Synthetic hunter: tracks the bird closest to escaping, drops its thumb to fire, makes a fist to reload. */
 class ShooterBot {
   x = 0.5;
-  y = 0.55;
+  y = 0.45;
   private bangT = 0;
   private fistT = 0;
   private settle = 0;
@@ -319,35 +322,34 @@ class ShooterBot {
       this.fistT = 0.35;
       return out(FIST);
     }
-    // most urgent = closest to the player (pickups when nothing is close)
-    let best: Enemy | null = null;
+    let best: Bird | null = null;
     let bestScore = -Infinity;
-    for (const e of w.enemies) {
-      if (e.z < -65) continue;
-      const s = e.z + (e.kind === 'pickup' ? 10 : 0) + (e.kind === 'missile' ? 8 : 0);
-      if (s > bestScore) {
-        bestScore = s;
+    for (const e of w.birds) {
+      const p = project(e.x, e.y, e.z, aspect);
+      if (p.sx < 0.02 || p.sx > 0.98 || p.sy < 0.02 || p.sy > 0.95) continue;
+      // how far across the screen it has flown (balloons are a bonus, lower priority)
+      const progress = e.kind === 'balloon' ? 0.3 : e.dir > 0 ? p.sx : 1 - p.sx;
+      if (progress > bestScore) {
+        bestScore = progress;
         best = e;
       }
     }
     if (!best) {
       this.x += (0.5 - this.x) * dt * 2;
-      this.y += (0.5 - this.y) * dt * 2;
+      this.y += (0.45 - this.y) * dt * 2;
       return out(GUN);
     }
-    const lead = 0.06;
-    const p = project(best.x, best.y, best.z + best.speed * lead, aspect);
+    const p = project(best.x + best.vx * 0.08, best.y, best.z, aspect);
     const dx = (p.sx - this.x) * aspect, dy = p.sy - this.y;
     const d = Math.hypot(dx, dy);
-    const v = 2.4 * dt;
+    const v = 1.8 * dt;
     if (d > 1e-4) {
-      this.x += (dx / d) * Math.min(d, v) / aspect;
+      this.x += ((dx / d) * Math.min(d, v)) / aspect;
       this.y += (dy / d) * Math.min(d, v);
     }
-    // fire once the smoothed aim has caught up
     const ad = Math.hypot((aim.x - p.sx) * aspect, aim.y - p.sy);
-    this.settle = ad < 0.03 + best.r * p.scale ? this.settle + dt : 0;
-    if (this.settle > 0.05 && w.fireCd <= 0 && w.reloadT <= 0) {
+    this.settle = ad < 0.025 + best.r * p.scale ? this.settle + dt : 0;
+    if (this.settle > 0.06 && w.fireCd <= 0 && w.reloadT <= 0) {
       this.bangT = 0.12;
       this.settle = 0;
     }

@@ -8,7 +8,7 @@ Your video never leaves your device.
 | Game | What you do | Ends when |
 | :--- | :--- | :--- |
 | **Starfall Blade** (3D) | Sweep your palm through rising cosmic crystals, pinch-and-release for a Nova blast, clap for a Shockwave. Dodge red Void Orbs. | 45 s timer |
-| **Neon Strike** (3D) | Make a finger gun, aim with your index finger, drop your thumb to fire, make a fist to reload. Both hands can shoot. Boss every 5th wave. | Your shield hits 0 |
+| **Sky Hunter** (3D) | Birds glide across a sunny sky, left→right and right→left. Make a finger gun, aim with your index finger, drop your thumb to fire, make a fist to reload. Both hands can shoot. | 5 birds escape |
 | **Juice Dojo** (2D) | Swipe your index finger fast to slice tossed fruit. 3+ in one swipe is a combo. Never cut a bomb. | You lose 3 lives |
 
 Every game also plays with **mouse or touch**, and the menus work hands-free: with the camera on, point at a button
@@ -23,16 +23,16 @@ and **pinch** (or hold still for a second) to press it.
 | **Starfall** slash | Sweep your hand | Move / drag | — |
 | **Starfall** Nova | Pinch, hold a beat, release | Click and hold, release | — |
 | **Starfall** Shockwave | Clap both hands (6 s cooldown) | — | — |
-| **Neon Strike** aim / fire | Finger gun, drop thumb | Aim, click or hold | — |
-| **Neon Strike** reload | Fist | Right-click | **R** |
-| **Neon Strike** auto-fire | Tick *Auto-fire on target* (accessibility) | | |
+| **Sky Hunter** aim / fire | Finger gun, drop thumb | Aim, click or hold | — |
+| **Sky Hunter** reload | Fist | Right-click | **R** |
+| **Sky Hunter** auto-fire | Tick *Auto-fire on target* (accessibility) | | |
 | **Juice Dojo** slice | Fast index-finger swipe | Fast drag / swipe | — |
 | Menus | Point + pinch, or point and hold | Click | **Space** start · **Esc/P** pause · **M** mute |
 
 ### Scoring
 
 - **Starfall**: crystal 100, prism 200, gold 350, Nova Star 500 (chain-slices everything) × combo up to x10. Void −150 and breaks the combo.
-- **Neon Strike**: drone 100, zig-zagger 150, missile 120, tank 400 (4 hits), boss 5000, × accuracy streak multiplier up to x5 (a miss or a hit on you resets it). Wave-clear bonus; extra bonus for a full shield. Pickups: green +30 shield, yellow 6 s rapid fire (no reloads), white nuke.
+- **Sky Hunter**: sparrow 100, swift 150 (quick, swoops), goose 250 (2 hits), golden bird 500 (rare, fast), × accuracy streak multiplier up to x5 (a miss or an escaped bird resets it). Birds take about 4–9 s to cross the screen and speed up a little each wave; every 5th wave is a flock wave with V-formations. Wave-clear bonus, extra if nothing escaped. Balloons: red +1 heart, yellow 6 s rapid fire, blue 5 s slow motion.
 - **Juice Dojo**: 10–15 per fruit, +10 per fruit for 3+ in one swipe. Pink dragonfruit = 5 s Frenzy (fruit rain, misses don't count), blue = Freeze (slow motion), gold = Double points. A life comes back every 750 points.
 
 Best scores are kept per game in `localStorage`.
@@ -75,7 +75,7 @@ the tools at any existing Chromium with `CHROME=/path/to/chrome npm run capture`
 | `?mute=1` | No sound |
 | `?seed=N` | Deterministic round |
 | `?round=S` | Starfall round length |
-| `?wave=N` | Neon Strike starting wave (`?wave=5` = boss) |
+| `?wave=N` | Sky Hunter starting wave (`?wave=5` = flock wave) |
 | `?speed=K` | Game speed multiplier |
 
 Test hook: `window.__game.snapshot()` returns the current screen, game, mode, fps and that game's stats.

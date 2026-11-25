@@ -16,13 +16,16 @@ Three playable hand-tracking games behind one hub, each also playable with mouse
   skeleton, so the drawn hand didn't line up with the video. Now only the video is mirrored.
 - **Input**: positions are sampled per render frame, so a slice segment is "where the hand was last frame → now", with
   no phantom slashes when a hand reappears; fingertip position and smoothed speed are exposed alongside the palm.
-- **Neon Strike** (new): synthwave 3D shooter. Finger-gun aim on the index tip, thumb-drop trigger with hysteresis,
-  fist reload, dual-wield, aim assist, waves, boss every 5th wave, pickups, streak multiplier, optional auto-fire.
+- **Sky Hunter** (new, replaced the first synthwave shooter draft): birds fly across a daytime countryside left→right
+  and right→left at a calm pace (4–9 s per crossing), each escape costs one of 5 hearts. Finger-gun aim on the index
+  tip, thumb-drop trigger with hysteresis, fist reload, dual-wield, aim assist, sparrows / swifts / geese (2 hits) /
+  golden birds, flock waves, power-up balloons, streak multiplier, optional auto-fire. The camera is pitched up 12°
+  so most of the frame is sky; `project()` / `ray()` in rules.ts include the pitch so hit-testing stays exact.
 - **Juice Dojo** (new): Canvas 2D fruit slicer. 8 procedurally painted fruits with cut faces, juice stains that soak
   into the floor and dry, bombs, lives, swipe combos, Frenzy / Freeze / Double power fruit, difficulty ramp.
 
 ## Verification (this machine, headless GPU Chrome)
-- `npm test`: 31/31 (starfall rules 10, gestures 3, fruit rules 9, shooter rules 9).
+- `npm test`: 32/32 (starfall rules 10, gestures 3, fruit rules 9, sky hunter rules 10).
 - `npm run typecheck`, `npm run build`: clean.
 - `npm run capture`: all three bots score, Starfall reaches results and restarts, zero console / GL errors. Desktop and
   mobile (390x844) screenshots checked by eye.
@@ -39,7 +42,7 @@ Three playable hand-tracking games behind one hub, each also playable with mouse
 | :--- | :--- | :--- |
 | `BLADE_RADIUS`, `NOVA_RADIUS`, `COMBO_WINDOW_S`, `CLAP_COOLDOWN_S` | `games/starfall/rules.ts` | Starfall feel |
 | `BLADE_MIN_SPEED`, `BLADE_MARGIN`, `MAX_LIVES`, `LIFE_EVERY`, power-up durations | `games/fruit/rules.ts` | Juice Dojo feel |
-| `ASSIST`, `MAG`, `RELOAD_S`, `FIRE_CD`, `SPAWN_Z`, wave pacing in `step()` | `games/shooter/rules.ts` | Neon Strike feel |
+| `CROSS` (bird speed, screen widths / s), `ASSIST`, `MAG`, `RELOAD_S`, `PITCH`, wave pacing in `step()` | `games/shooter/rules.ts` | Sky Hunter feel |
 | Trigger thresholds (0.55 / 0.32) | `Trigger` in `games/shooter/index.ts` | thumb-drop sensitivity |
 | `REGION`, `TIP_REGION` | `core/input.ts` | camera crop mapped to the screen |
 | `DWELL_S` | `main.ts` | hand-cursor hold-to-click time |

@@ -145,7 +145,7 @@ html, body {
   margin-bottom: 6px;
 }
 .game-card[data-game='fruit'] .art { background: linear-gradient(180deg, #7a4a26, #4e2d14); }
-.game-card[data-game='shooter'] .art { background: linear-gradient(180deg, #05010f, #4a0d5e 70%, #b3206e); }
+.game-card[data-game='shooter'] .art { background: linear-gradient(180deg, #3b82d6, #8cc6f5 60%, #ffe9c2); }
 .game-card[data-game='starfall'] .art { background: radial-gradient(circle at 40% 40%, #2a1d5a, #07050f); }
 .card-name { font: 700 24px/1.1 var(--display); }
 .card-tag { color: var(--ink-dim); font-size: 13px; line-height: 1.4; min-height: 2.8em; }
@@ -293,6 +293,12 @@ button:active { transform: translateY(1px) scale(0.98); }
   transition: transform 0.3s, filter 0.3s, opacity 0.3s;
 }
 .lives i.lost { filter: grayscale(1) brightness(0.4); opacity: 0.5; transform: scale(0.75); box-shadow: none; }
+.hearts i {
+  width: 24px;
+  height: 22px;
+  border-radius: 0;
+  clip-path: path('M12 21 L2.5 11.5 A5.5 5.5 0 0 1 12 4.5 A5.5 5.5 0 0 1 21.5 11.5 Z');
+}
 .lives.hurt { animation: hurt 0.45s; }
 @keyframes hurt { 25% { transform: translateX(-6px); } 50% { transform: translateX(6px); } 75% { transform: translateX(-3px); } }
 .powers { display: flex; gap: 8px; }
